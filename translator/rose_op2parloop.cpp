@@ -1,17 +1,32 @@
 /*
-
-Copyright (c) 2010, Graham Markall
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-
-    * Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-    * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-    * Neither the name of Imperial College London nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-*/
+ * 
+ * Copyright (c) 2010, Graham Markall
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *      this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of Imperial College London nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ */
 
 #include <iostream>
 #include <sstream>
@@ -21,9 +36,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 const int op_par_loop::num_params = 2;
 
-
-
-///////////////////////////// Utility string functions for creating argument names /////////////////////////////////////////
+/////////// Utility string functions for creating argument names ///////////////
 
 inline string buildStr(int i)
 {
@@ -42,35 +55,27 @@ inline string argLocal(int i)
   return arg(i)+"_l";
 }
 
-///////////////////////////// op_par_loop : Implementation ///////////////////////////////////////////////////////////////////
+/////////// op_par_loop : Implementation ///////////////////////////////////////
 
 /*
- *	Update container
+ *  Update container
  */
 void op_par_loop::updatePlanContainer(op_argument* argument)
 {
-	if(argument->usesIndirection())
-	{
-		string cur_name = argument->arg->get_symbol()->get_name().getString();
-		if(prev_name.compare(cur_name) != 0)
-		{
-				planContainer.push_back(argument);
-				prev_name = cur_name;
-		}
-		argument->plan_index = planContainer.size()-1;
-	}
+  if(argument->usesIndirection())
+  {
+    string cur_name = argument->arg->get_symbol()->get_name().getString();
+    if(prev_name.compare(cur_name) != 0)
+    {
+        planContainer.push_back(argument);
+        prev_name = cur_name;
+    }
+    argument->plan_index = planContainer.size()-1;
+  }
 }
 
 
-///////////////////////////// OPParLoop : Implementation /////////////////////////////////////////////////////////////////////
-
-/*
- * Empty default constructor
- */
-OPParLoop::OPParLoop() 
-{
-  
-}
+//////////// OPParLoop : Implementation ////////////////////////////////////////
 
 /* 
  * ParLoop needs to know which ROSE project it is working on
@@ -81,8 +86,9 @@ void OPParLoop::setProject(SgProject *p)
 }
 
 /*
- * The visit function is reimplemented from AstSimpleProcessing, and is called for every node
- * in the the AST. We are only really interested in looking at function calls to op_par_loop_3.
+ * The visit function is reimplemented from AstSimpleProcessing, and is called
+ * for every node in the the AST. We are only really interested in looking at
+ * function calls to op_par_loop_3.
  */
 void OPParLoop::visit(SgNode *n) 
 {
@@ -98,13 +104,13 @@ void OPParLoop::visit(SgNode *n)
     string fn_name = fn->getAssociatedFunctionDeclaration()->get_name().getString();
     if(   fn_name.compare("op_par_loop_2")==0
        || fn_name.compare("op_par_loop_3")==0
-			 || fn_name.compare("op_par_loop_4")==0 
-			 || fn_name.compare("op_par_loop_5")==0
-			 || fn_name.compare("op_par_loop_6")==0
-			 || fn_name.compare("op_par_loop_7")==0
-			 || fn_name.compare("op_par_loop_8")==0
-			 || fn_name.compare("op_par_loop_9")==0
-			)
+       || fn_name.compare("op_par_loop_4")==0 
+       || fn_name.compare("op_par_loop_5")==0
+       || fn_name.compare("op_par_loop_6")==0
+       || fn_name.compare("op_par_loop_7")==0
+       || fn_name.compare("op_par_loop_8")==0
+       || fn_name.compare("op_par_loop_9")==0
+      )
     {
       cout << "Located Function " << fn_name << endl;
       SgExpressionPtrList& args = fn->get_args()->get_expressions();
@@ -114,20 +120,19 @@ void OPParLoop::visit(SgNode *n)
       SgExpressionPtrList::iterator i=args.begin();
       op_par_loop *pl = new op_par_loop();
       pl->kernel = isSgFunctionRefExp(*i++);
-      //pl->label = isSgStringVal(*i++)->get_value();
       pl->set = isSgVarRefExp(*i++);
       
       // Calculate number of args = total - 3 i.e. kernel, label and set and create arg objects
       int numArgs = (args.size() - op_par_loop::num_params) / op_argument::num_params;
       for(int j=0; j<numArgs; j++)
       {
-				op_argument* parg = new op_argument(i);
-				parg->own_index = pl->args.size();
-				pl->updatePlanContainer(parg);
-				
-				pl->args.push_back(parg);
-				if(parg->usesIndirection())
-					pl->ind_args.push_back(parg);
+        op_argument* parg = new op_argument(i);
+        parg->own_index = pl->args.size();
+        pl->updatePlanContainer(parg);
+        
+        pl->args.push_back(parg);
+        if(parg->usesIndirection())
+          pl->ind_args.push_back(parg);
       }
 
       // Generate kernels
@@ -204,8 +209,8 @@ void OPParLoop::atTraversalEnd()
 
 
 /*
- *	Generate Seperate File For the Special Kernel
- *	---------------------------------------------
+ *  Generate Seperate File For the Special Kernel
+ *  ---------------------------------------------
  */ 
 void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
 {
@@ -218,15 +223,14 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
   ROSE_ASSERT(file!=NULL);
   SgGlobal *globalScope = file->get_globalScope();
   
-	addTextForUnparser(globalScope,"#include \"user_defined_types.h\"\n",AstUnparseAttribute::e_before);
+  addTextForUnparser(globalScope,"#include \"user_defined_types.h\"\n",AstUnparseAttribute::e_before);
   addTextForUnparser(globalScope,"#include \"op_datatypes.h\"\n",AstUnparseAttribute::e_before);
   addTextForUnparser(globalScope,"#include \"kernels.h\"\n\n",AstUnparseAttribute::e_before);
-	
+  
     
   // In order to build the prototype for the plan function, we need to get hold of the types 
   // that we intend to pass it. Since these are declared in op_datatypes.h, we need to 
   // loop them up before we can use them.
-  //SgFunctionParameterTypeList *paramTypes = buildFunctionParameterTypeList();
   SgType *op_set, *op_dat, *op_ptr, *op_access, /* *op_datatype,*/ *op_plan;
   op_set = lookupNamedTypeInParentScopes("op_set");
   op_dat = SgClassType::createType(buildStructDeclaration(SgName("op_dat<void>"), globalScope));
@@ -234,27 +238,23 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
   op_access = lookupNamedTypeInParentScopes("op_access");
   op_plan = lookupNamedTypeInParentScopes("op_plan");
 
-  // Now we do forward declaration of the external functions
-  forwardDeclareUtilFunctions(globalScope, op_set, op_dat, op_ptr, op_access, op_plan);
-
   // C kernel prefixed with the __device__ keyword. However, we could copy the AST
   // subtree representing the kernel into the new file, which would remove the
   // requirement for writing each kernel in a separate .h file.
   addTextForUnparser(globalScope, "\n\n__device__\n#include <"+kernel_name+".h>\n",AstUnparseAttribute::e_before);
 
-	
-	// 1 FUNCTION DEFINITION <START>
+  
+  // 1 FUNCTION DEFINITION <START>
   // =======================================
 
   // We need to build a list of parameters for our __global__ function,
   // based on the arguments given to op_par_loop_3 earlier:
   SgFunctionParameterList *paramList = buildFunctionParameterList();
-  //SgInitializedName *initName;
-	bool reduction_required = false;
+  bool reduction_required = false;
   for(int i=0; i<pl->numArgs(); i++)
   {
-		if(pl->args[i]->consideredAsReduction())
-			reduction_required = true;
+    if(pl->args[i]->consideredAsReduction())
+      reduction_required = true;
     SgInitializedName *name;
     SgType *argType = buildPointerType(pl->args[i]->type);
     name = buildInitializedName(arg(i), argType);
@@ -262,14 +262,14 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
   }
   SgInitializedName *set_size = buildInitializedName("set_size", buildIntType());
   appendArg(paramList, set_size);
-	for(int i=0; i<pl->numArgs(); i++)
+  for(int i=0; i<pl->numArgs(); i++)
   {
-		if(pl->args[i]->consideredAsReduction())
-		{
-			SgInitializedName *block_reduct = buildInitializedName("block_reduct" + buildStr(i), buildPointerType(buildVoidType()));
-			appendArg(paramList, block_reduct);
-		}
-	}
+    if(pl->args[i]->consideredAsReduction())
+    {
+      SgInitializedName *block_reduct = buildInitializedName("block_reduct" + buildStr(i), buildPointerType(buildVoidType()));
+      appendArg(paramList, block_reduct);
+    }
+  }
   
   // We can build the __global__ function using the parameter list and add it to our new file. We get a reference to
   // the body of this function so that we can add code to it later on.
@@ -281,23 +281,22 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
   // We Add the declarations of local variables first.
   for(int i=0; i<pl->numArgs(); i++)
   {
-		if(pl->args[i]->isGlobal())
-		{
-    	SgVariableDeclaration *varDec;
-    	varDec = buildVariableDeclaration(argLocal(i), buildArrayType(pl->args[i]->type, buildIntVal(pl->args[i]->dim)), NULL, body);
-    	appendStatement(varDec,body);
-		}
+    if(pl->args[i]->isGlobal())
+    {
+      SgVariableDeclaration *varDec;
+      varDec = buildVariableDeclaration(argLocal(i), buildArrayType(pl->args[i]->type, buildIntVal(pl->args[i]->dim)), NULL, body);
+      appendStatement(varDec,body);
+    }
   }
 
-	
+  
   // 2 HANDLE GLOBAL DATA <TRANSFER TO DEVICE>
   // =======================================
-	preKernelGlobalDataHandling(fn, pl, body);
+  preKernelGlobalDataHandling(fn, pl, body);
 
 
   // 3 MAIN EXECUTION LOOP <BEGIN>
   // =======================================
-	//cout << "MAIN EXECUTION LOOP <BEGIN>" << endl;
   SgScopeStatement *loopBody = buildBasicBlock();
   SgExpression *rhs = buildAddOp(buildOpaqueVarRefExp("threadIdx.x"), buildMultiplyOp(buildOpaqueVarRefExp("blockIdx.x"), buildOpaqueVarRefExp("blockDim.x")));
   SgVariableDeclaration *loopVarDec = buildVariableDeclaration(SgName("n"), buildIntType(), buildAssignInitializer(rhs), loopBody);
@@ -313,29 +312,27 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
 
   // 3.1 FIRE KERNEL
   // ===============================================
-	//cout << "FIRE KERNEL" << endl;
   // Next we build a call to the __device__ function. We build the parameters
   // for this call first, then the call, and add it into the outer loop body.
   SgExprListExp *kPars = buildExprListExp();
   for(int i=0; i<pl->numArgs(); i++)
   {
-		if(pl->args[i]->isNotGlobal())
-		{
-			SgExpression *e = buildAddOp(buildOpaqueVarRefExp(arg(i)), buildMultiplyOp(buildOpaqueVarRefExp(loopVar), buildIntVal(pl->args[i]->dim)));
-    	kPars->append_expression(e);
-		}
-		else
-		{
-			SgExpression *e = buildOpaqueVarRefExp(argLocal(i), body);
-    	kPars->append_expression(e);
-		}
+    if(pl->args[i]->isNotGlobal())
+    {
+      SgExpression *e = buildAddOp(buildOpaqueVarRefExp(arg(i)), buildMultiplyOp(buildOpaqueVarRefExp(loopVar), buildIntVal(pl->args[i]->dim)));
+      kPars->append_expression(e);
+    }
+    else
+    {
+      SgExpression *e = buildOpaqueVarRefExp(argLocal(i), body);
+      kPars->append_expression(e);
+    }
   }
   SgExprStatement *uf = buildFunctionCallStmt(SgName(kernel_name), buildVoidType(), kPars);
   appendStatement(uf,loopBody);
 
   // 3 MAIN EXECUTION LOOP <END>
   // =======================================
-	//cout << "MAIN EXECUTION LOOP <END>" << endl;
   // Now we have completed the body of the outer for loop, we can build an initialiser, 
   // an increment and a test statement. The we insert this loop into the __gloabl__ function.
   // Because threadIdx.x etc are not really variables, we invent "opaque" variables with these
@@ -345,97 +342,85 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
 
   // 4 HANDLE GLOBAL DATA <TRANSFER FROM DEVICE>
   // =======================================
-	postKernelGlobalDataHandling(fn, pl, body);
+  postKernelGlobalDataHandling(fn, pl, body);
 
 
-	// 1 FUNCTION DEFINITION <END>
-  // =======================================	
+  // 1 FUNCTION DEFINITION <END>
+  // =======================================  
 
 
 
-	// -----------------------------------------------------------------------------------------------
-	// Reductions require additional kernel launch - create that definition
-	if(reduction_required)
-	{
-		paramList = buildFunctionParameterList();
-		SgInitializedName *grid_size = buildInitializedName("gridsize", buildIntType());
-		appendArg(paramList, grid_size);
-		for(int i=0; i<pl->numArgs(); i++)
-		{
-			if(pl->args[i]->consideredAsReduction())
-			{
-				SgType *argType = buildPointerType(pl->args[i]->type);
-				SgInitializedName *name = buildInitializedName(arg(i), argType);
-				paramList->append_arg(name);
+  // -----------------------------------------------------------------------------------------------
+  // Reductions require additional kernel launch - create that definition
+  if(reduction_required)
+  {
+    paramList = buildFunctionParameterList();
+    SgInitializedName *grid_size = buildInitializedName("gridsize", buildIntType());
+    appendArg(paramList, grid_size);
+    for(int i=0; i<pl->numArgs(); i++)
+    {
+      if(pl->args[i]->consideredAsReduction())
+      {
+        SgType *argType = buildPointerType(pl->args[i]->type);
+        SgInitializedName *name = buildInitializedName(arg(i), argType);
+        paramList->append_arg(name);
 
-				SgInitializedName *block_reduct = buildInitializedName("block_reduct" + buildStr(i), buildPointerType(buildVoidType()));
-				appendArg(paramList, block_reduct);
-			}
-		}
+        SgInitializedName *block_reduct = buildInitializedName("block_reduct" + buildStr(i), buildPointerType(buildVoidType()));
+        appendArg(paramList, block_reduct);
+      }
+    }
 
-		// We can build the __global__ function using the parameter list and add it to our new file. We get a reference to
-		// the body of this function so that we can add code to it later on.
-		func = buildDefiningFunctionDeclaration("op_cuda_"+kernel_name+"_reduction", buildVoidType(), paramList, globalScope);
-		addTextForUnparser(func,"\n\n__global__",AstUnparseAttribute::e_before);
-		appendStatement(func, globalScope);
-		body = func->get_definition()->get_body();
+    // We can build the __global__ function using the parameter list and add it to our new file. We get a reference to
+    // the body of this function so that we can add code to it later on.
+    func = buildDefiningFunctionDeclaration("op_cuda_"+kernel_name+"_reduction", buildVoidType(), paramList, globalScope);
+    addTextForUnparser(func,"\n\n__global__",AstUnparseAttribute::e_before);
+    appendStatement(func, globalScope);
+    body = func->get_definition()->get_body();
 
-		//cout << "HANDLE REDUCT DATA <TRANSFER FROM DEVICE>" << endl;
-		for(int i=0; i<pl->numArgs(); i++)
-		{
-			if(pl->args[i]->consideredAsReduction())
-			{
-				// Create loop
-				SgStatement *viInit = buildVariableDeclaration(SgName("d"), buildIntType(), buildAssignInitializer(buildIntVal(0)));
-		    SgName indVar = isSgVariableDeclaration(viInit)->get_definition()->get_vardefn()->get_name();
-					    
-		    // Call function
-				SgExprListExp *kPars2 = buildExprListExp();
-				SgExpression *e = buildOpaqueVarRefExp(arg(i));
-				e = buildAddOp(e, buildVarRefExp(indVar));
-				kPars2->append_expression(e);
-				e = buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i)));
-				kPars2->append_expression(e);
-				e = buildOpaqueVarRefExp(SgName("gridsize"));
-				kPars2->append_expression(e);
+    for(int i=0; i<pl->numArgs(); i++)
+    {
+      if(pl->args[i]->consideredAsReduction())
+      {
+        // Create loop
+        SgStatement *viInit = buildVariableDeclaration(SgName("d"), buildIntType(), buildAssignInitializer(buildIntVal(0)));
+        SgName indVar = isSgVariableDeclaration(viInit)->get_definition()->get_vardefn()->get_name();
+              
+        // Call function
+        SgExprListExp *kPars2 = buildExprListExp();
+        SgExpression *e = buildOpaqueVarRefExp(arg(i));
+        e = buildAddOp(e, buildVarRefExp(indVar));
+        kPars2->append_expression(e);
+        e = buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i)));
+        kPars2->append_expression(e);
+        e = buildOpaqueVarRefExp(SgName("gridsize"));
+        kPars2->append_expression(e);
 
-				SgExprStatement *uf1 = NULL;
-				switch(pl->args[i]->access)
-				{
-					case OP_INC:
-						uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_INC>"), buildVoidType(), kPars2);
-						break;
-					case OP_MAX:
-						uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_MAX>"), buildVoidType(), kPars2);
-						break;
-					case OP_MIN:
-						uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_MIN>"), buildVoidType(), kPars2);
-						break;
-					default:
-						break;
-				}
+        SgExprStatement *uf1 = NULL;
+        switch(pl->args[i]->access)
+        {
+          case OP_INC:
+            uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_INC>"), buildVoidType(), kPars2);
+            break;
+          case OP_MAX:
+            uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_MAX>"), buildVoidType(), kPars2);
+            break;
+          case OP_MIN:
+            uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_MIN>"), buildVoidType(), kPars2);
+            break;
+          default:
+            break;
+        }
 
-				// build test and increment, and add the loop into the body of the inner loop.
-				SgScopeStatement *viLoopBody = buildBasicBlock(uf1);
-		    SgExprStatement *viTest = buildExprStatement(buildLessThanOp(buildOpaqueVarRefExp(indVar), buildIntVal(pl->args[i]->dim)));
-		    SgPlusPlusOp *viIncrement = buildPlusPlusOp(buildOpaqueVarRefExp(indVar));
-		    SgStatement *viForLoop = buildForStatement(viInit, viTest, viIncrement, viLoopBody);
-		    appendStatement(viForLoop,body);
-			}
-		}
-	}
+        // build test and increment, and add the loop into the body of the inner loop.
+        SgScopeStatement *viLoopBody = buildBasicBlock(uf1);
+        SgExprStatement *viTest = buildExprStatement(buildLessThanOp(buildOpaqueVarRefExp(indVar), buildIntVal(pl->args[i]->dim)));
+        SgPlusPlusOp *viIncrement = buildPlusPlusOp(buildOpaqueVarRefExp(indVar));
+        SgStatement *viForLoop = buildForStatement(viInit, viTest, viIncrement, viLoopBody);
+        appendStatement(viForLoop,body);
+      }
+    }
+  }
   
-  
-	
-
-
-
-
-
-
-
-
-	
 
   // The following code builds the stub function. A little of the code that is output by
   // op2.m is not generated here, simply as it is not necessary and I was running out of
@@ -456,8 +441,6 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
     appendArg(paramList, name);
     name = buildInitializedName(SgName("ptr"+buildStr(i)), buildPointerType(op_ptr));
     appendArg(paramList, name);
-    //name = buildInitializedName(SgName("dim"+buildStr(i)), buildIntType());
-    //appendArg(paramList, name);
     name = buildInitializedName(SgName("acc"+buildStr(i)), op_access);
     appendArg(paramList, name);
   }
@@ -470,44 +453,39 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
   appendStatement(func, globalScope);
   body = func->get_definition()->get_body();
 
-	// Declare gridsize and bsize
-	SgExpression *e = buildOpaqueVarRefExp(SgName("BSIZE"));
-	SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("bsize"), buildIntType(), buildAssignInitializer(e));
-	appendStatement(varDec, body);
-	
-	e = buildOpaqueVarRefExp(SgName("set.size"));
-	e = buildSubtractOp(e, buildIntVal(1));
-	e = buildDivideOp(e, buildOpaqueVarRefExp(SgName("bsize")));
-	e = buildAddOp(e, buildIntVal(1));
-	varDec = buildVariableDeclaration(SgName("gridsize"), buildIntType(), buildAssignInitializer(e));
-	appendStatement(varDec, body);
+  // Declare gridsize and bsize
+  SgExpression *e = buildOpaqueVarRefExp(SgName("BSIZE"));
+  SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("bsize"), buildIntType(), buildAssignInitializer(e));
+  appendStatement(varDec, body);
+  
+  e = buildOpaqueVarRefExp(SgName("set.size"));
+  e = buildSubtractOp(e, buildIntVal(1));
+  e = buildDivideOp(e, buildOpaqueVarRefExp(SgName("bsize")));
+  e = buildAddOp(e, buildIntVal(1));
+  varDec = buildVariableDeclaration(SgName("gridsize"), buildIntType(), buildAssignInitializer(e));
+  appendStatement(varDec, body);
 
-	/*
-  by Zohirul : PRE-Handle const and global data
-  */
   preHandleConstAndGlobalData(fn, pl, body);
 
   // Add the timer block <start>
-	//-----------------------------------------
+  //-----------------------------------------
   /*
   float elapsed_time_ms=0.0f;
   cudaEvent_t start, stop;
   cudaEventCreate( &start );
   cudaEventCreate( &stop  );
   cudaEventRecord( start, 0 );
-	*/
+  */
   //-----------------------------------------
-	varDec = buildVariableDeclaration(SgName("elapsed_time_ms"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), body);
-	addTextForUnparser(varDec,"\ncudaEvent_t start, stop;", AstUnparseAttribute::e_after);
+  varDec = buildVariableDeclaration(SgName("elapsed_time_ms"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), body);
+  addTextForUnparser(varDec,"\ncudaEvent_t start, stop;", AstUnparseAttribute::e_after);
   appendStatement(varDec,body);
-	SgExprStatement *kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("start")))), body);
+  SgExprStatement *kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("start")))), body);
   appendStatement(kCall,body);
-	kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("stop")))), body);
+  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("stop")))), body);
   appendStatement(kCall,body);
-	kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("start")), buildIntVal(0)), body);
+  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("start")), buildIntVal(0)), body);
   appendStatement(kCall,body);
-
-
 
   // To add a call to the CUDA function, we need to build a list of parameters that
   // we pass to it. The easiest way to do this is to name the members of the 
@@ -521,14 +499,14 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
   }
   e = buildOpaqueVarRefExp(SgName("set.size"));
   kPars->append_expression(e);
-	for(int i=0; i<pl->numArgs(); i++)
+  for(int i=0; i<pl->numArgs(); i++)
   {
-		if(pl->args[i]->consideredAsReduction())
-		{
-			kPars->append_expression(buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
-		}
-	}
-		
+    if(pl->args[i]->consideredAsReduction())
+    {
+      kPars->append_expression(buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
+    }
+  }
+    
 
   // We have to add the kernel configuration as part of the function name
   // as CUDA is not directly supported by ROSE - however, I understand
@@ -536,58 +514,52 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
   kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<gridsize,bsize,reduct_shared>>>", buildVoidType(), kPars, body);
   appendStatement(kCall,body);
 
-	// If we have reduction operations it requires a second kernel launch (gridsize = 1, blocksize = 1)
-	if(reduction_required)
-	{
-		kPars = buildExprListExp();
-		kPars->append_expression(buildOpaqueVarRefExp(SgName("gridsize")));
-		for(int i=0; i<pl->numArgs(); i++)
-		{
-			if(pl->args[i]->consideredAsReduction())
-			{
-				SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(i)+"->dat_d"));
-    		SgCastExp* e_cast = buildCastExp(e, buildPointerType(pl->args[i]->type));
-    		kPars->append_expression(e_cast);
+  // If we have reduction operations it requires a second kernel launch (gridsize = 1, blocksize = 1)
+  if(reduction_required)
+  {
+    kPars = buildExprListExp();
+    kPars->append_expression(buildOpaqueVarRefExp(SgName("gridsize")));
+    for(int i=0; i<pl->numArgs(); i++)
+    {
+      if(pl->args[i]->consideredAsReduction())
+      {
+        SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(i)+"->dat_d"));
+        SgCastExp* e_cast = buildCastExp(e, buildPointerType(pl->args[i]->type));
+        kPars->append_expression(e_cast);
 
-				kPars->append_expression(buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
-			}
-		}
-		kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"_reduction<<<1,1,reduct_shared>>>", buildVoidType(), kPars, body);
-		appendStatement(kCall,body);
-	}
+        kPars->append_expression(buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
+      }
+    }
+    kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"_reduction<<<1,1,reduct_shared>>>", buildVoidType(), kPars, body);
+    appendStatement(kCall,body);
+  }
 
 
-	// Add the timer block <end>
-	//------------------------------------------------------
-	/*
+  // Add the timer block <end>
+  //------------------------------------------------------
+  /*
   cudaEventRecord( stop, 0 );
   cudaThreadSynchronize();
   cudaEventElapsedTime( &elapsed_time_ms, start, stop );
   cudaEventDestroy( start );
   cudaEventDestroy( stop );
-	*/  
-	//------------------------------------------------------
-	kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("stop")), buildIntVal(0)), body);
+  */  
+  //------------------------------------------------------
+  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("stop")), buildIntVal(0)), body);
   appendStatement(kCall,body);
-	kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, body);
-	appendStatement(kCall, body);
-	kCall = buildFunctionCallStmt("cudaEventElapsedTime", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("&elapsed_time_ms")), buildOpaqueVarRefExp(SgName("start")), buildOpaqueVarRefExp(SgName("stop")) ), body);
-	appendStatement(kCall, body);
-	kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("start")) ), body);
-	appendStatement(kCall, body);
-	kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("stop")) ), body);
-	appendStatement(kCall, body);
+  kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, body);
+  appendStatement(kCall, body);
+  kCall = buildFunctionCallStmt("cudaEventElapsedTime", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("&elapsed_time_ms")), buildOpaqueVarRefExp(SgName("start")), buildOpaqueVarRefExp(SgName("stop")) ), body);
+  appendStatement(kCall, body);
+  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("start")) ), body);
+  appendStatement(kCall, body);
+  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("stop")) ), body);
+  appendStatement(kCall, body);
 
-  /*
-  by Zohirul : PRE-Handle const and global data
-  */
   postHandleConstAndGlobalData(fn, pl, body);
 
-	/*
-  by Zohirul : PRE-Handle const and global data
-  */
   SgReturnStmt* rtstmt = buildReturnStmt(buildOpaqueVarRefExp(SgName("elapsed_time_ms")));
-	appendStatement(rtstmt, body);
+  appendStatement(rtstmt, body);
   
   // Add to list of files that need to be unparsed.
   kernels.push_back(file->get_project());
@@ -595,8 +567,8 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
 
 
 /*
- *	Generate Seperate File For the Standard Kernel
- *	----------------------------------------------
+ *  Generate Seperate File For the Standard Kernel
+ *  ----------------------------------------------
  */ 
 void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 {
@@ -610,7 +582,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   SgGlobal *globalScope = file->get_globalScope();
   
   // Start adding the include files
-	addTextForUnparser(globalScope,"#include \"user_defined_types.h\"\n",AstUnparseAttribute::e_before);
+  addTextForUnparser(globalScope,"#include \"user_defined_types.h\"\n",AstUnparseAttribute::e_before);
   addTextForUnparser(globalScope,"#include \"op_datatypes.h\"\n",AstUnparseAttribute::e_before);
   addTextForUnparser(globalScope,"#include \"kernels.h\"\n\n",AstUnparseAttribute::e_before);
   
@@ -627,9 +599,6 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   op_access = lookupNamedTypeInParentScopes("op_access");
   op_plan = lookupNamedTypeInParentScopes("op_plan");
 
-  // Now we append all the external forward declaration functions
-  forwardDeclareUtilFunctions(globalScope, op_set, op_dat, op_ptr, op_access, op_plan);
-
   // 1.1 FUNCTION DEFINITION - CREATE PARAMS
   // ===============================================
   
@@ -637,72 +606,72 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   SgType *argType = NULL;
   SgInitializedName *nm = NULL;
   
-	// First Assemble all expressions using plan container <for arguments with indirection>
-	for(unsigned int i=0; i<pl->planContainer.size(); i++)
-	{
-		// Add "ind_arg0"
-		argType = buildPointerType(pl->planContainer[i]->type);
-		nm = buildInitializedName(SgName("ind_arg" + buildStr(i)), argType);
-		appendArg(paramList, nm);
+  // First Assemble all expressions using plan container <for arguments with indirection>
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
+  {
+    // Add "ind_arg0"
+    argType = buildPointerType(pl->planContainer[i]->type);
+    nm = buildInitializedName(SgName("ind_arg" + buildStr(i)), argType);
+    appendArg(paramList, nm);
 
-		// Add "ind_arg0_ptrs"
-		argType = buildPointerType(buildIntType());
-		nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_ptrs"), argType);
-		appendArg(paramList, nm);
+    // Add "ind_arg0_ptrs"
+    argType = buildPointerType(buildIntType());
+    nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_ptrs"), argType);
+    appendArg(paramList, nm);
 
-		// Add "ind_arg0_sizes"
-		nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_sizes"), argType);
-		appendArg(paramList, nm);
-	
-		// Add "ind_arg0_offset"
-		nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_offset"), argType);
-		appendArg(paramList, nm);
-	}
-	// Then add all the pointers
-	bool reduction_required = false;
-	for(unsigned int i=0; i<pl->args.size(); i++)
-	{
-		if(pl->args[i]->consideredAsReduction())
-			reduction_required = true;
-		if(pl->args[i]->usesIndirection())
-		{
-			// Add "arg1_ptr"
-			argType = buildPointerType(buildIntType());
-			nm = buildInitializedName(arg(i) + SgName("_ptrs"), argType);
-			appendArg(paramList, nm);
-		}
-		else if(pl->args[i]->isGlobal())
-		{
-			argType = buildPointerType(pl->args[i]->type);
-			nm = buildInitializedName(arg(i), argType);
-		  appendArg(paramList, nm);
-		}
-		else
-		{
-			argType = buildPointerType(pl->args[i]->type);
-			nm = buildInitializedName(arg(i) + SgName("_d"), argType);
-		  appendArg(paramList, nm);
-		}
-	}
-	// Other stuff
-	argType = buildIntType();
-	nm = buildInitializedName(SgName("block_offset"), argType);
-	appendArg(paramList, nm);
-	argType = buildPointerType(argType);
-	nm = buildInitializedName(SgName("blkmap"), argType);
-	appendArg(paramList, nm);
-	nm = buildInitializedName(SgName("offset"), argType);
-	appendArg(paramList, nm);
-	nm = buildInitializedName(SgName("nelems"), argType);
-	appendArg(paramList, nm);
-	nm = buildInitializedName(SgName("ncolors"), argType);
-	appendArg(paramList, nm);
-	nm = buildInitializedName(SgName("colors"), argType);
-	appendArg(paramList, nm);
-	if(reduction_required)
-		appendArg(paramList, buildInitializedName(SgName("block_reduct"), buildVoidType()));
+    // Add "ind_arg0_sizes"
+    nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_sizes"), argType);
+    appendArg(paramList, nm);
   
-	// 1.2 ADD FUNCTION DEFINITION
+    // Add "ind_arg0_offset"
+    nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_offset"), argType);
+    appendArg(paramList, nm);
+  }
+  // Then add all the pointers
+  bool reduction_required = false;
+  for(unsigned int i=0; i<pl->args.size(); i++)
+  {
+    if(pl->args[i]->consideredAsReduction())
+      reduction_required = true;
+    if(pl->args[i]->usesIndirection())
+    {
+      // Add "arg1_ptr"
+      argType = buildPointerType(buildIntType());
+      nm = buildInitializedName(arg(i) + SgName("_ptrs"), argType);
+      appendArg(paramList, nm);
+    }
+    else if(pl->args[i]->isGlobal())
+    {
+      argType = buildPointerType(pl->args[i]->type);
+      nm = buildInitializedName(arg(i), argType);
+      appendArg(paramList, nm);
+    }
+    else
+    {
+      argType = buildPointerType(pl->args[i]->type);
+      nm = buildInitializedName(arg(i) + SgName("_d"), argType);
+      appendArg(paramList, nm);
+    }
+  }
+  // Other stuff
+  argType = buildIntType();
+  nm = buildInitializedName(SgName("block_offset"), argType);
+  appendArg(paramList, nm);
+  argType = buildPointerType(argType);
+  nm = buildInitializedName(SgName("blkmap"), argType);
+  appendArg(paramList, nm);
+  nm = buildInitializedName(SgName("offset"), argType);
+  appendArg(paramList, nm);
+  nm = buildInitializedName(SgName("nelems"), argType);
+  appendArg(paramList, nm);
+  nm = buildInitializedName(SgName("ncolors"), argType);
+  appendArg(paramList, nm);
+  nm = buildInitializedName(SgName("colors"), argType);
+  appendArg(paramList, nm);
+  if(reduction_required)
+    appendArg(paramList, buildInitializedName(SgName("block_reduct"), buildVoidType()));
+  
+  // 1.2 ADD FUNCTION DEFINITION
   // ===============================================
 
   // We can build the __global__ function using the parameter list and add it to our new file. We get a reference to
@@ -712,22 +681,22 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   appendStatement(func, globalScope);
   SgBasicBlock *body = func->get_definition()->get_body();
   
-	// 2. ADD DECLARATION OF LOCAL VARIABLES
+  // 2. ADD DECLARATION OF LOCAL VARIABLES
   // ===============================================
 
   // We Add the declarations of local variables first, required only for INC
   for(int i=0; i<pl->numArgs(); i++)
   {
-		if((pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC) || (pl->args[i]->isNotGlobal() && !pl->args[i]->usesIndirection()))
-		{
-		  SgType *argType = pl->args[i]->type;
-		  SgVariableDeclaration *varDec = buildVariableDeclaration(argLocal(i), buildArrayType(argType, buildIntVal(pl->args[i]->dim)), NULL, body);
-		  appendStatement(varDec,body);
-  	}
+    if((pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC) || (pl->args[i]->isNotGlobal() && !pl->args[i]->usesIndirection()))
+    {
+      SgType *argType = pl->args[i]->type;
+      SgVariableDeclaration *varDec = buildVariableDeclaration(argLocal(i), buildArrayType(argType, buildIntVal(pl->args[i]->dim)), NULL, body);
+      appendStatement(varDec,body);
+    }
   }
 
-	
-	// 3. ADD SHARED MEMORY DECLARATIONS
+  
+  // 3. ADD SHARED MEMORY DECLARATIONS
   // ===============================================
 
   // Add shared memory declaration
@@ -735,108 +704,108 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   addTextForUnparser(varDec,"\n\n  extern __shared__ ", AstUnparseAttribute::e_after);
   appendStatement(varDec,body);
 
-	// Add shared variables for the planContainer variables - for each category <ptr>
-	for(unsigned int i=0; i<pl->planContainer.size(); i++)
-	{
-		SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_ptr"), buildPointerType(buildIntType()), NULL, body);
-  	addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  	appendStatement(varDec,body);
-	}
+  // Add shared variables for the planContainer variables - for each category <ptr>
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
+  {
+    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_ptr"), buildPointerType(buildIntType()), NULL, body);
+    addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
+    appendStatement(varDec,body);
+  }
 
-	// Add shared variables for the planContainer variables - for each category <size>
-	for(unsigned int i=0; i<pl->planContainer.size(); i++)
-	{
-		SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_size"), buildIntType(), NULL, body);
-  	addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  	appendStatement(varDec,body);
-	}
+  // Add shared variables for the planContainer variables - for each category <size>
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
+  {
+    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_size"), buildIntType(), NULL, body);
+    addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
+    appendStatement(varDec,body);
+  }
 
-	// Add shared variables for the planContainer variables - for each category <s for shared>
-	for(unsigned int i=0; i<pl->planContainer.size(); i++)
-	{
-		SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_s"), buildPointerType(pl->planContainer[i]->type), NULL, body);
-  	addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  	appendStatement(varDec,body);
-	}
+  // Add shared variables for the planContainer variables - for each category <s for shared>
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
+  {
+    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_s"), buildPointerType(pl->planContainer[i]->type), NULL, body);
+    addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
+    appendStatement(varDec,body);
+  }
 
-	// Then add respective shared variables for each argument
-	for(unsigned int i=0; i<pl->args.size(); i++)
-	{
-		if(pl->args[i]->usesIndirection())
-		{
-			SgVariableDeclaration *varDec = buildVariableDeclaration(SgName(arg(i) + "_ptr"), buildPointerType(buildIntType()), NULL, body);
-			addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-			appendStatement(varDec,body);
-		}
-		else if(!pl->args[i]->consideredAsConst())
-		{
-			SgVariableDeclaration *varDec = buildVariableDeclaration(SgName(arg(i)), buildPointerType(pl->args[i]->type), NULL, body);
-			addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-			appendStatement(varDec,body);
-		}
-	}
+  // Then add respective shared variables for each argument
+  for(unsigned int i=0; i<pl->args.size(); i++)
+  {
+    if(pl->args[i]->usesIndirection())
+    {
+      SgVariableDeclaration *varDec = buildVariableDeclaration(SgName(arg(i) + "_ptr"), buildPointerType(buildIntType()), NULL, body);
+      addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
+      appendStatement(varDec,body);
+    }
+    else if(!pl->args[i]->consideredAsConst())
+    {
+      SgVariableDeclaration *varDec = buildVariableDeclaration(SgName(arg(i)), buildPointerType(pl->args[i]->type), NULL, body);
+      addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
+      appendStatement(varDec,body);
+    }
+  }
 
-	// Add nelem
+  // Add nelem
   varDec = buildVariableDeclaration(SgName("nelem2"), buildIntType(), NULL, body);
-	addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
+  addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
   appendStatement(varDec,body);
 
-	// Add ncolor
-	varDec = buildVariableDeclaration(SgName("ncolor"), buildIntType(), NULL, body);
-	addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
+  // Add ncolor
+  varDec = buildVariableDeclaration(SgName("ncolor"), buildIntType(), NULL, body);
+  addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
   appendStatement(varDec,body);
 
-	// Add color
-	varDec = buildVariableDeclaration(SgName("color"), buildPointerType(buildIntType()), NULL, body);
-	addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
+  // Add color
+  varDec = buildVariableDeclaration(SgName("color"), buildPointerType(buildIntType()), NULL, body);
+  addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
   appendStatement(varDec,body);
 
-	// blockId
-	varDec = buildVariableDeclaration(SgName("blockId"), buildIntType(), NULL, body);
-	addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
+  // blockId
+  varDec = buildVariableDeclaration(SgName("blockId"), buildIntType(), NULL, body);
+  addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
   appendStatement(varDec,body);
 
-	// nelem
-	varDec = buildVariableDeclaration(SgName("nelem"), buildIntType(), NULL, body);
-	addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
+  // nelem
+  varDec = buildVariableDeclaration(SgName("nelem"), buildIntType(), NULL, body);
+  addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
   appendStatement(varDec,body);
 
 
-	// 4.1 GET SIZES AND SHIFT POINTERS AND DIRECT MAPPED DATA
+  // 4.1 GET SIZES AND SHIFT POINTERS AND DIRECT MAPPED DATA
   // ========================================================
 
-	// We put this part within an IF condition, so that threadIdx.x == 0 performs this
-	SgScopeStatement *ifBody = buildBasicBlock();
+  // We put this part within an IF condition, so that threadIdx.x == 0 performs this
+  SgScopeStatement *ifBody = buildBasicBlock();
   SgExprStatement *conditionStmt = buildExprStatement( buildEqualityOp( buildOpaqueVarRefExp(SgName("threadIdx.x")), buildIntVal(0) ) );
   SgIfStmt* threadCondition = buildIfStmt(conditionStmt, ifBody, NULL);
 
   // Add blockId variable
   SgExpression* expression = buildOpaqueVarRefExp(SgName("blkmap[blockIdx.x + block_offset]"));
-	expression = buildAssignOp(buildOpaqueVarRefExp(SgName("blockId")), expression);
-	appendStatement(buildExprStatement(expression), ifBody);
+  expression = buildAssignOp(buildOpaqueVarRefExp(SgName("blockId")), expression);
+  appendStatement(buildExprStatement(expression), ifBody);
 
-	// Add blockId variable
+  // Add blockId variable
   expression = buildOpaqueVarRefExp(SgName("nelems[blockId]"));
-	expression = buildAssignOp(buildOpaqueVarRefExp(SgName("nelem")), expression);
-	appendStatement(buildExprStatement(expression), ifBody);
+  expression = buildAssignOp(buildOpaqueVarRefExp(SgName("nelem")), expression);
+  appendStatement(buildExprStatement(expression), ifBody);
 
-	// Add ncolor variable
-	expression = buildOpaqueVarRefExp(SgName("ncolors[blockId]"));
-	expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ncolor")), expression);
-	appendStatement(buildExprStatement(expression), ifBody);
+  // Add ncolor variable
+  expression = buildOpaqueVarRefExp(SgName("ncolors[blockId]"));
+  expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ncolor")), expression);
+  appendStatement(buildExprStatement(expression), ifBody);
 
-	// Cache offset[blockId]
-	expression = buildOpaqueVarRefExp(SgName("offset[blockId]"));
-	varDec = buildVariableDeclaration(SgName("cur_offset"), buildIntType(), buildAssignInitializer(expression), ifBody);
-	appendStatement(varDec, ifBody);
+  // Cache offset[blockId]
+  expression = buildOpaqueVarRefExp(SgName("offset[blockId]"));
+  varDec = buildVariableDeclaration(SgName("cur_offset"), buildIntType(), buildAssignInitializer(expression), ifBody);
+  appendStatement(varDec, ifBody);
 
-	// Add color variable
-	expression = buildOpaqueVarRefExp(SgName("cur_offset"));
-	expression = buildAddOp(buildOpaqueVarRefExp(SgName("colors")), expression);
-	expression = buildAssignOp(buildOpaqueVarRefExp(SgName("color")), expression);
-	appendStatement(buildExprStatement(expression), ifBody);
+  // Add color variable
+  expression = buildOpaqueVarRefExp(SgName("cur_offset"));
+  expression = buildAddOp(buildOpaqueVarRefExp(SgName("colors")), expression);
+  expression = buildAssignOp(buildOpaqueVarRefExp(SgName("color")), expression);
+  appendStatement(buildExprStatement(expression), ifBody);
 
-	// Example : int nelem2 = blockDim.x*(1+(X)/blockDim.x);
+  // Example : int nelem2 = blockDim.x*(1+(X)/blockDim.x);
   expression = buildOpaqueVarRefExp(SgName("nelem"));
   expression = buildSubtractOp(expression, buildIntVal(1));
   expression = buildDivideOp(expression, buildOpaqueVarRefExp(SgName("blockDim.x")));
@@ -845,148 +814,148 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   expression = buildAssignOp(buildOpaqueVarRefExp(SgName("nelem2")), expression);
   appendStatement(buildExprStatement(expression), ifBody);
 
-	// Calculate the category sizes
-	for(unsigned int i=0; i<pl->planContainer.size(); i++)
-	{
-		expression = buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_sizes[blockId]"));
-		expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_size")), expression);
-		appendStatement(buildExprStatement(expression), ifBody);
-	}
+  // Calculate the category sizes
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
+  {
+    expression = buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_sizes[blockId]"));
+    expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_size")), expression);
+    appendStatement(buildExprStatement(expression), ifBody);
+  }
 
-	// Calculate the category pointers
-	for(unsigned int i=0; i<pl->planContainer.size(); i++)
-	{
-		expression = buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_offset[blockId]"));
-		expression = buildAddOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_ptrs")), expression);
-		expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_ptr")), expression);
-		appendStatement(buildExprStatement(expression), ifBody);
-	}
+  // Calculate the category pointers
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
+  {
+    expression = buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_offset[blockId]"));
+    expression = buildAddOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_ptrs")), expression);
+    expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_ptr")), expression);
+    appendStatement(buildExprStatement(expression), ifBody);
+  }
 
-	// Calculate argument pointers
-	expression = buildOpaqueVarRefExp(SgName("cur_offset"));
-	for(unsigned int i=0; i<pl->args.size(); i++)
-	{
-		if(pl->args[i]->usesIndirection())
-		{
-			SgExpression* ex = buildAddOp(buildOpaqueVarRefExp(SgName(arg(i) + "_ptrs")), expression);
-			ex = buildAssignOp(buildOpaqueVarRefExp(SgName(arg(i) + "_ptr")), ex);
-			appendStatement(buildExprStatement(ex), ifBody);
-		}
-		else if(!pl->args[i]->consideredAsConst())
-		{
-			SgExpression* ex = buildMultiplyOp(expression, buildIntVal(pl->args[i]->dim));
-			ex = buildAddOp(buildOpaqueVarRefExp(SgName(arg(i) + "_d")), ex);
-			ex = buildAssignOp(buildOpaqueVarRefExp(SgName(arg(i))), ex);
-			appendStatement(buildExprStatement(ex), ifBody);
-		}
-	}
+  // Calculate argument pointers
+  expression = buildOpaqueVarRefExp(SgName("cur_offset"));
+  for(unsigned int i=0; i<pl->args.size(); i++)
+  {
+    if(pl->args[i]->usesIndirection())
+    {
+      SgExpression* ex = buildAddOp(buildOpaqueVarRefExp(SgName(arg(i) + "_ptrs")), expression);
+      ex = buildAssignOp(buildOpaqueVarRefExp(SgName(arg(i) + "_ptr")), ex);
+      appendStatement(buildExprStatement(ex), ifBody);
+    }
+    else if(!pl->args[i]->consideredAsConst())
+    {
+      SgExpression* ex = buildMultiplyOp(expression, buildIntVal(pl->args[i]->dim));
+      ex = buildAddOp(buildOpaqueVarRefExp(SgName(arg(i) + "_d")), ex);
+      ex = buildAssignOp(buildOpaqueVarRefExp(SgName(arg(i))), ex);
+      appendStatement(buildExprStatement(ex), ifBody);
+    }
+  }
 
-	// Set Shared Memory Pointers
-	for(unsigned int i=0; i<pl->planContainer.size(); i++)
-	{
-		if(i==0)
-		{
-			SgVariableDeclaration* var_dec = buildVariableDeclaration(SgName("nbytes"), buildIntType(), buildAssignInitializer(buildIntVal(0)), ifBody);
-			appendStatement(var_dec, ifBody);
-		}
-		else
-		{
-			// Example: nbytes += ROUND_UP(ind_arg0_size*sizeof(float)*2);
-			expression = buildMultiplyOp(buildSizeOfOp(buildFloatType()), buildIntVal(pl->planContainer[i-1]->dim));
-			expression = buildMultiplyOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i-1) + "_size")), expression);
-			SgExprListExp* expressions = buildExprListExp();
-			expressions->append_expression(expression);
-			expression = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), expressions);
-			expression = buildPlusAssignOp(buildOpaqueVarRefExp(SgName("nbytes")), expression);
-			appendStatement(buildExprStatement(expression), ifBody);
-		}
-		expression = buildOpaqueVarRefExp(SgName("shared[nbytes]"));
-		expression = buildAddressOfOp(expression);
-		expression = buildCastExp(expression, buildPointerType(pl->planContainer[i]->type));
-		expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_s")), expression);
-		appendStatement(buildExprStatement(expression), ifBody);
-	}
-	appendStatement(threadCondition, body);
+  // Set Shared Memory Pointers
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
+  {
+    if(i==0)
+    {
+      SgVariableDeclaration* var_dec = buildVariableDeclaration(SgName("nbytes"), buildIntType(), buildAssignInitializer(buildIntVal(0)), ifBody);
+      appendStatement(var_dec, ifBody);
+    }
+    else
+    {
+      // Example: nbytes += ROUND_UP(ind_arg0_size*sizeof(float)*2);
+      expression = buildMultiplyOp(buildSizeOfOp(buildFloatType()), buildIntVal(pl->planContainer[i-1]->dim));
+      expression = buildMultiplyOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i-1) + "_size")), expression);
+      SgExprListExp* expressions = buildExprListExp();
+      expressions->append_expression(expression);
+      expression = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), expressions);
+      expression = buildPlusAssignOp(buildOpaqueVarRefExp(SgName("nbytes")), expression);
+      appendStatement(buildExprStatement(expression), ifBody);
+    }
+    expression = buildOpaqueVarRefExp(SgName("shared[nbytes]"));
+    expression = buildAddressOfOp(expression);
+    expression = buildCastExp(expression, buildPointerType(pl->planContainer[i]->type));
+    expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_s")), expression);
+    appendStatement(buildExprStatement(expression), ifBody);
+  }
+  appendStatement(threadCondition, body);
 
-	// 4.2 CALL SYNCTHREADS
+  // 4.2 CALL SYNCTHREADS
   // ========================================================
-	SgExprStatement *kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, body);
+  SgExprStatement *kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, body);
   appendStatement(kCall, body);
 
-	// 4.3 COPY INDIRECT DATA SETS INTO SHARED MEMORY
+  // 4.3 COPY INDIRECT DATA SETS INTO SHARED MEMORY
   // ========================================================
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
-	{
-		// Create outer loop
-		SgScopeStatement *loopBody = buildBasicBlock();
-		SgStatement *loopInit = buildVariableDeclaration( SgName("n"), buildIntType(), buildAssignInitializer(buildOpaqueVarRefExp(SgName("threadIdx.x"))) );
-		SgName loopVar = isSgVariableDeclaration(loopInit)->get_definition()->get_vardefn()->get_name();
-		SgName loopVarLimit = SgName("ind_") + arg(i) + SgName("_size");
-		SgExprStatement *loopTest = buildExprStatement( buildLessThanOp( buildVarRefExp(loopVar), buildOpaqueVarRefExp(loopVarLimit) ) );	
-		SgPlusAssignOp *loopIncrement = buildPlusAssignOp(buildVarRefExp(loopVar), buildOpaqueVarRefExp(SgName("blockDim.x")) );
-		SgStatement *loopForLoop = buildForStatement(loopInit, loopTest, loopIncrement, loopBody);
-		
-		// If dim is greater than one then we need to use cached variable
-		if(	pl->planContainer[i]->dim > 1)
-		{
-			if(pl->planContainer[i]->access == OP_READ || pl->planContainer[i]->access == OP_RW)
-			{
-				// Create cached variable
-				SgExpression* e = buildOpaqueVarRefExp(SgName("ind_") + arg(i) + SgName("_ptr[n]"));
-				SgStatement *vdec = buildVariableDeclaration( SgName("ind_index"), buildIntType(), buildAssignInitializer(e) );
-				appendStatement(vdec, loopBody);
-			}
+  {
+    // Create outer loop
+    SgScopeStatement *loopBody = buildBasicBlock();
+    SgStatement *loopInit = buildVariableDeclaration( SgName("n"), buildIntType(), buildAssignInitializer(buildOpaqueVarRefExp(SgName("threadIdx.x"))) );
+    SgName loopVar = isSgVariableDeclaration(loopInit)->get_definition()->get_vardefn()->get_name();
+    SgName loopVarLimit = SgName("ind_") + arg(i) + SgName("_size");
+    SgExprStatement *loopTest = buildExprStatement( buildLessThanOp( buildVarRefExp(loopVar), buildOpaqueVarRefExp(loopVarLimit) ) );  
+    SgPlusAssignOp *loopIncrement = buildPlusAssignOp(buildVarRefExp(loopVar), buildOpaqueVarRefExp(SgName("blockDim.x")) );
+    SgStatement *loopForLoop = buildForStatement(loopInit, loopTest, loopIncrement, loopBody);
+    
+    // If dim is greater than one then we need to use cached variable
+    if(  pl->planContainer[i]->dim > 1)
+    {
+      if(pl->planContainer[i]->access == OP_READ || pl->planContainer[i]->access == OP_RW)
+      {
+        // Create cached variable
+        SgExpression* e = buildOpaqueVarRefExp(SgName("ind_") + arg(i) + SgName("_ptr[n]"));
+        SgStatement *vdec = buildVariableDeclaration( SgName("ind_index"), buildIntType(), buildAssignInitializer(e) );
+        appendStatement(vdec, loopBody);
+      }
 
-			// Create inner loop body
-			for(int j=0; j<pl->planContainer[i]->dim; j++)
-			{
-				SgName indrvar = SgName("ind_") + arg(i) + SgName("_s[" + buildStr(j) + "+n*" + buildStr(pl->planContainer[i]->dim) + "]");
-				SgExpression* asgnExpr;
-				SgName asgnName; 
-				switch(pl->planContainer[i]->access)
-				{
-					case OP_READ:
-					case OP_RW:
-						asgnName = SgName("ind_") + arg(i) + SgName("[" + buildStr(j) + "+ind_index*" + buildStr(pl->planContainer[i]->dim) + "]");
-						asgnExpr = buildOpaqueVarRefExp(asgnName);
-						break;
-					case OP_WRITE:
-						break;
-					case OP_INC:
-						asgnExpr = buildIntVal(0);
-						break;
-					default:
-						break;
-				}
-				expression = buildAssignOp( buildOpaqueVarRefExp(indrvar), asgnExpr );
-				appendStatement(buildExprStatement(expression), loopBody);
-			}
-		}
-		else
-		{
-			SgName indrvar = SgName("ind_") + arg(i) + SgName("_s[n*" + buildStr(pl->planContainer[i]->dim) + "]");
-			SgExpression* asgnExpr;
-			SgName asgnName; 
-			switch(pl->planContainer[i]->access)
-			{
-				case OP_READ:
-				case OP_RW:
-					asgnName = SgName("ind_") + arg(i) + SgName("[ind_") + arg(i) + SgName("_ptr[n]*") + SgName(buildStr(pl->planContainer[i]->dim)) + SgName("]");
-					asgnExpr = buildOpaqueVarRefExp(asgnName);
-					break;
-				case OP_WRITE:
-					break;
-				case OP_INC:
-					asgnExpr = buildIntVal(0);
-					break;
-				default:
-					break;
-			}
-			expression = buildAssignOp( buildOpaqueVarRefExp(indrvar), asgnExpr );
-			appendStatement(buildExprStatement(expression), loopBody);
-		}
-		// Append outer loop
-		appendStatement(loopForLoop, body);
+      // Create inner loop body
+      for(int j=0; j<pl->planContainer[i]->dim; j++)
+      {
+        SgName indrvar = SgName("ind_") + arg(i) + SgName("_s[" + buildStr(j) + "+n*" + buildStr(pl->planContainer[i]->dim) + "]");
+        SgExpression* asgnExpr;
+        SgName asgnName; 
+        switch(pl->planContainer[i]->access)
+        {
+          case OP_READ:
+          case OP_RW:
+            asgnName = SgName("ind_") + arg(i) + SgName("[" + buildStr(j) + "+ind_index*" + buildStr(pl->planContainer[i]->dim) + "]");
+            asgnExpr = buildOpaqueVarRefExp(asgnName);
+            break;
+          case OP_WRITE:
+            break;
+          case OP_INC:
+            asgnExpr = buildIntVal(0);
+            break;
+          default:
+            break;
+        }
+        expression = buildAssignOp( buildOpaqueVarRefExp(indrvar), asgnExpr );
+        appendStatement(buildExprStatement(expression), loopBody);
+      }
+    }
+    else
+    {
+      SgName indrvar = SgName("ind_") + arg(i) + SgName("_s[n*" + buildStr(pl->planContainer[i]->dim) + "]");
+      SgExpression* asgnExpr;
+      SgName asgnName; 
+      switch(pl->planContainer[i]->access)
+      {
+        case OP_READ:
+        case OP_RW:
+          asgnName = SgName("ind_") + arg(i) + SgName("[ind_") + arg(i) + SgName("_ptr[n]*") + SgName(buildStr(pl->planContainer[i]->dim)) + SgName("]");
+          asgnExpr = buildOpaqueVarRefExp(asgnName);
+          break;
+        case OP_WRITE:
+          break;
+        case OP_INC:
+          asgnExpr = buildIntVal(0);
+          break;
+        default:
+          break;
+      }
+      expression = buildAssignOp( buildOpaqueVarRefExp(indrvar), asgnExpr );
+      appendStatement(buildExprStatement(expression), loopBody);
+    }
+    // Append outer loop
+    appendStatement(loopForLoop, body);
   }
 
   // 4.4 CALL SYNCTHREADS
@@ -996,7 +965,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
     
   // 5. PRE-KERNEL HEADER
   // ========================================================
-	preKernelGlobalDataHandling(fn, pl, body);
+  preKernelGlobalDataHandling(fn, pl, body);
 
   // 6. CREATE OUTER MAIN LOOP BODY
   // ========================================================
@@ -1010,120 +979,120 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   appendStatement(varDec, mainLoopBody);
 
   // Part 2 <begin>: Create the if statement and do the actual calculation
-  SgScopeStatement *condBody2 = buildBasicBlock();				
+  SgScopeStatement *condBody2 = buildBasicBlock();        
   SgExprStatement *condStmt2 = buildExprStatement( buildLessThanOp( buildVarRefExp(mainLoopVar), buildVarRefExp(SgName("nelem")) ) );
   SgIfStmt* cond2 = buildIfStmt(condStmt2, condBody2, NULL);
   
   // Part 2_1: Initialize Local Variables
   for(int i=0; i<pl->numArgs(); i++)
   {
-		if(pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC && pl->args[i]->usesIndirection())
-		{
-			for(int j=0; j<pl->args[i]->dim; j++)
-			{
-				// If uses indirection
-				SgExpression* exprDst = buildOpaqueVarRefExp(argLocal(i) + SgName("["+buildStr(j)+"]"));
-				SgExpression* exprSrc = buildIntVal(0);
-			
-				// Append statement to the inner loop body
-				appendStatement(buildExprStatement( buildAssignOp( exprDst,exprSrc ) ), condBody2);
-			}
-		}
+    if(pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC && pl->args[i]->usesIndirection())
+    {
+      for(int j=0; j<pl->args[i]->dim; j++)
+      {
+        // If uses indirection
+        SgExpression* exprDst = buildOpaqueVarRefExp(argLocal(i) + SgName("["+buildStr(j)+"]"));
+        SgExpression* exprSrc = buildIntVal(0);
+      
+        // Append statement to the inner loop body
+        appendStatement(buildExprStatement( buildAssignOp( exprDst,exprSrc ) ), condBody2);
+      }
+    }
   }
 
   // Part 2_1_2: Load directly accessed global memory data into local variables i.e. registers
   for(int i=0; i<pl->numArgs(); i++)
   {
-		if(pl->args[i]->isNotGlobal() && !pl->args[i]->usesIndirection())
-		{
-			if(pl->args[i]->access == OP_READ || pl->args[i]->access == OP_RW)
-			{
-				for(int j=0; j<pl->args[i]->dim; j++)
-				{
-					//arg4_l[0] = *(arg4 + n * 4 + 0);
-				
-					SgExpression* lhs1 = buildMultiplyOp( buildOpaqueVarRefExp(SgName("n")), buildIntVal(pl->args[i]->dim) );
-					lhs1 = buildAddOp(lhs1, buildIntVal(j));
-					lhs1 = buildAddOp(buildOpaqueVarRefExp(arg(i)), lhs1);
-					lhs1 = buildPointerDerefExp(lhs1);
+    if(pl->args[i]->isNotGlobal() && !pl->args[i]->usesIndirection())
+    {
+      if(pl->args[i]->access == OP_READ || pl->args[i]->access == OP_RW)
+      {
+        for(int j=0; j<pl->args[i]->dim; j++)
+        {
+          // (Example? old note? to be deleted?) arg4_l[0] = *(arg4 + n * 4 + 0);
+        
+          SgExpression* lhs1 = buildMultiplyOp( buildOpaqueVarRefExp(SgName("n")), buildIntVal(pl->args[i]->dim) );
+          lhs1 = buildAddOp(lhs1, buildIntVal(j));
+          lhs1 = buildAddOp(buildOpaqueVarRefExp(arg(i)), lhs1);
+          lhs1 = buildPointerDerefExp(lhs1);
 
-					SgExpression* rhs1 = buildOpaqueVarRefExp(argLocal(i) + SgName("[" + buildStr(j) + "]"));
-					rhs1 = buildAssignOp(rhs1, lhs1);			
+          SgExpression* rhs1 = buildOpaqueVarRefExp(argLocal(i) + SgName("[" + buildStr(j) + "]"));
+          rhs1 = buildAssignOp(rhs1, lhs1);      
 
-					SgStatement* expr_statement = buildExprStatement(rhs1);
-					appendStatement(expr_statement, condBody2);
-				}
-			}
-		}
-	} 
+          SgStatement* expr_statement = buildExprStatement(rhs1);
+          appendStatement(expr_statement, condBody2);
+        }
+      }
+    }
+  } 
   
   // Part 2_2: Call user kernel <!!COMPLICATED!!>
   SgExprListExp *kPars = buildExprListExp();
   for(int i=0; i<pl->numArgs(); i++)
   {
-		if(pl->args[i]->isGlobal())
-		{
-			if(pl->args[i]->consideredAsReduction())
-			{
-				expression = buildOpaqueVarRefExp(SgName(arg(i) + "_l"));
-				kPars->append_expression(expression);
-			}
-			else if(pl->args[i]->consideredAsConst())
-			{
-				expression = buildOpaqueVarRefExp(SgName(arg(i)));
-				kPars->append_expression(expression);
-			}
-		}
-		else if(pl->args[i]->isNotGlobal())
-		{
-			if(pl->args[i]->usesIndirection())
-			{
-				if(pl->args[i]->access == OP_INC)
-				{
-					expression = buildOpaqueVarRefExp(SgName(arg(i) + "_l"));
-					kPars->append_expression(expression);
-				}
-				else
-				{
-					expression = buildMultiplyOp(buildOpaqueVarRefExp(SgName(arg(i)+"_ptr[n]")), buildIntVal(pl->args[i]->dim));
-					expression = buildAddOp(buildOpaqueVarRefExp(SgName("ind_" + arg(pl->args[i]->plan_index) + "_s")), expression);
-					kPars->append_expression(expression);
-				}
-			}
-			else
-			{
-				kPars->append_expression( buildOpaqueVarRefExp(SgName(argLocal(i))) );
-			}
-		}
+    if(pl->args[i]->isGlobal())
+    {
+      if(pl->args[i]->consideredAsReduction())
+      {
+        expression = buildOpaqueVarRefExp(SgName(arg(i) + "_l"));
+        kPars->append_expression(expression);
+      }
+      else if(pl->args[i]->consideredAsConst())
+      {
+        expression = buildOpaqueVarRefExp(SgName(arg(i)));
+        kPars->append_expression(expression);
+      }
+    }
+    else if(pl->args[i]->isNotGlobal())
+    {
+      if(pl->args[i]->usesIndirection())
+      {
+        if(pl->args[i]->access == OP_INC)
+        {
+          expression = buildOpaqueVarRefExp(SgName(arg(i) + "_l"));
+          kPars->append_expression(expression);
+        }
+        else
+        {
+          expression = buildMultiplyOp(buildOpaqueVarRefExp(SgName(arg(i)+"_ptr[n]")), buildIntVal(pl->args[i]->dim));
+          expression = buildAddOp(buildOpaqueVarRefExp(SgName("ind_" + arg(pl->args[i]->plan_index) + "_s")), expression);
+          kPars->append_expression(expression);
+        }
+      }
+      else
+      {
+        kPars->append_expression( buildOpaqueVarRefExp(SgName(argLocal(i))) );
+      }
+    }
   }
   SgExprStatement *uf = buildFunctionCallStmt(SgName(kernel_name), buildVoidType(), kPars);
   appendStatement(uf, condBody2);
 
-	// Part 2_2_2: Move directly accessed data back to registers
+  // Part 2_2_2: Move directly accessed data back to registers
   for(int i=0; i<pl->numArgs(); i++)
   {
-		if(pl->args[i]->isNotGlobal() && !pl->args[i]->usesIndirection())
-		{
-			if(pl->args[i]->access == OP_WRITE || pl->args[i]->access == OP_RW)
-			{
-				for(int j=0; j<pl->args[i]->dim; j++)
-				{
-					//arg4_l[0] = *(arg4 + n * 4 + 0);
-				
-					SgExpression* lhs1 = buildMultiplyOp( buildOpaqueVarRefExp(SgName("n")), buildIntVal(pl->args[i]->dim) );
-					lhs1 = buildAddOp(lhs1, buildIntVal(j));
-					lhs1 = buildAddOp(buildOpaqueVarRefExp(arg(i)), lhs1);
-					lhs1 = buildPointerDerefExp(lhs1);
+    if(pl->args[i]->isNotGlobal() && !pl->args[i]->usesIndirection())
+    {
+      if(pl->args[i]->access == OP_WRITE || pl->args[i]->access == OP_RW)
+      {
+        for(int j=0; j<pl->args[i]->dim; j++)
+        {
+          // (Example? old note? to be deleted?) arg4_l[0] = *(arg4 + n * 4 + 0);
+        
+          SgExpression* lhs1 = buildMultiplyOp( buildOpaqueVarRefExp(SgName("n")), buildIntVal(pl->args[i]->dim) );
+          lhs1 = buildAddOp(lhs1, buildIntVal(j));
+          lhs1 = buildAddOp(buildOpaqueVarRefExp(arg(i)), lhs1);
+          lhs1 = buildPointerDerefExp(lhs1);
 
-					SgExpression* rhs1 = buildOpaqueVarRefExp(argLocal(i) + SgName("[" + buildStr(j) + "]"));
-					lhs1 = buildAssignOp(lhs1, rhs1);			
+          SgExpression* rhs1 = buildOpaqueVarRefExp(argLocal(i) + SgName("[" + buildStr(j) + "]"));
+          lhs1 = buildAssignOp(lhs1, rhs1);      
 
-					SgStatement* expr_statement = buildExprStatement(lhs1);
-					appendStatement(expr_statement, condBody2);
-				}
-			}
-		}
-	}
+          SgStatement* expr_statement = buildExprStatement(lhs1);
+          appendStatement(expr_statement, condBody2);
+        }
+      }
+    }
+  }
   
   // Part 2_3: Set the color of the thread
   expression = buildAssignOp( buildOpaqueVarRefExp(color2), buildOpaqueVarRefExp(SgName("color[") +  mainLoopVar + SgName("]")) );
@@ -1136,157 +1105,154 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   
   // 7. COPY DATA BACK TO THE SHARED MEMORY
   // ========================================================
-	
+  
   // Part 3: Inside the main outer loop body - the third part, copying values from arg to shared memory
-	bool brequired = false;
-	for(int i=0; i<pl->numArgs(); i++) {
-			if(pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC && pl->args[i]->usesIndirection()) {
-				brequired = true;
-			}
-	}
-	if(brequired)
-	{
-		// Create outer loop
-		SgScopeStatement *loopBody = buildBasicBlock();
-		SgStatement *loopInit = buildVariableDeclaration( SgName("col"), buildIntType(), buildAssignInitializer(buildIntVal(0)) );
-		SgName loopVar = isSgVariableDeclaration(loopInit)->get_definition()->get_vardefn()->get_name();
-		SgName loopVarLimit = SgName("ncolor");
-		SgExprStatement *loopTest = buildExprStatement( buildLessThanOp( buildVarRefExp(loopVar), buildOpaqueVarRefExp(loopVarLimit) ) );	
-		SgPlusPlusOp *loopIncrement = buildPlusPlusOp(buildVarRefExp(loopVar));
-		SgStatement *loopForLoop = buildForStatement(loopInit, loopTest, loopIncrement, loopBody);
+  bool brequired = false;
+  for(int i=0; i<pl->numArgs(); i++) {
+      if(pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC && pl->args[i]->usesIndirection()) {
+        brequired = true;
+      }
+  }
+  if(brequired)
+  {
+    // Create outer loop
+    SgScopeStatement *loopBody = buildBasicBlock();
+    SgStatement *loopInit = buildVariableDeclaration( SgName("col"), buildIntType(), buildAssignInitializer(buildIntVal(0)) );
+    SgName loopVar = isSgVariableDeclaration(loopInit)->get_definition()->get_vardefn()->get_name();
+    SgName loopVarLimit = SgName("ncolor");
+    SgExprStatement *loopTest = buildExprStatement( buildLessThanOp( buildVarRefExp(loopVar), buildOpaqueVarRefExp(loopVarLimit) ) );  
+    SgPlusPlusOp *loopIncrement = buildPlusPlusOp(buildVarRefExp(loopVar));
+    SgStatement *loopForLoop = buildForStatement(loopInit, loopTest, loopIncrement, loopBody);
 
-		// Create if color match condition
-		SgScopeStatement *condBody = buildBasicBlock();				
-		SgExprStatement *condStmt = buildExprStatement( buildEqualityOp( buildVarRefExp(loopVar), buildVarRefExp(color2) ) );
-		SgIfStmt* cond = buildIfStmt(condStmt, condBody, NULL);
+    // Create if color match condition
+    SgScopeStatement *condBody = buildBasicBlock();        
+    SgExprStatement *condStmt = buildExprStatement( buildEqualityOp( buildVarRefExp(loopVar), buildVarRefExp(color2) ) );
+    SgIfStmt* cond = buildIfStmt(condStmt, condBody, NULL);
 
-		bool alreadyDefined = false;
-		for(int i=0; i<pl->numArgs(); i++)
-		{
-			if(pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC && pl->args[i]->usesIndirection())
-			{
-				if(pl->args[i]->dim > 1)
-				{
-					// Create cached variable
-					SgExpression* e = buildOpaqueVarRefExp(arg(i)+ SgName("_ptr[n]"));
-					if(!alreadyDefined)
-					{
-						SgStatement *vdec = buildVariableDeclaration( SgName("ind_index"), buildIntType(), buildAssignInitializer(e) );
-						appendStatement(vdec, condBody);
-						alreadyDefined = true;
-					}
-					else
-					{
-						SgExpression* ee = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_index")), e);
-						appendStatement(buildExprStatement(ee), condBody);
-					}
-			
-					// Create inner loop
-					for(int j=0; j<pl->args[i]->dim; j++)
-					{
-						SgName dstName = SgName("ind_")+ arg(pl->args[i]->plan_index)+ SgName("_s[" + buildStr(j) + "+ind_index*" + buildStr(pl->args[i]->dim) + "]");
-						SgName srcName = argLocal(i) + SgName("[" + buildStr(j) + "]");
-						expression = buildPlusAssignOp( buildOpaqueVarRefExp(dstName), buildOpaqueVarRefExp(srcName) );
-						appendStatement(buildExprStatement(expression), condBody);			
-					}
-				}
-				else
-				{
-						SgName dstName = SgName("ind_")+ arg(pl->args[i]->plan_index)+ SgName("_s[")+ arg(i)+ SgName("_ptr[n]*" + buildStr(pl->args[i]->dim) + "]");
-						SgName srcName = argLocal(i) + SgName("[0]");
-						expression = buildPlusAssignOp( buildOpaqueVarRefExp(dstName), buildOpaqueVarRefExp(srcName) );
-						appendStatement(buildExprStatement(expression), condBody);			
-				}
-			}
-		}
-		// Append condition statement to outer loop body
-		appendStatement(cond, loopBody);
-		// Create syncfunction statement
-		kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, body);
-		// Append syncthreads
-		appendStatement(kCall, loopBody);
-		// Append outer loop to the main body
-		appendStatement(loopForLoop, mainLoopBody);
-	}
-	
+    bool alreadyDefined = false;
+    for(int i=0; i<pl->numArgs(); i++)
+    {
+      if(pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC && pl->args[i]->usesIndirection())
+      {
+        if(pl->args[i]->dim > 1)
+        {
+          // Create cached variable
+          SgExpression* e = buildOpaqueVarRefExp(arg(i)+ SgName("_ptr[n]"));
+          if(!alreadyDefined)
+          {
+            SgStatement *vdec = buildVariableDeclaration( SgName("ind_index"), buildIntType(), buildAssignInitializer(e) );
+            appendStatement(vdec, condBody);
+            alreadyDefined = true;
+          }
+          else
+          {
+            SgExpression* ee = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_index")), e);
+            appendStatement(buildExprStatement(ee), condBody);
+          }
+      
+          // Create inner loop
+          for(int j=0; j<pl->args[i]->dim; j++)
+          {
+            SgName dstName = SgName("ind_")+ arg(pl->args[i]->plan_index)+ SgName("_s[" + buildStr(j) + "+ind_index*" + buildStr(pl->args[i]->dim) + "]");
+            SgName srcName = argLocal(i) + SgName("[" + buildStr(j) + "]");
+            expression = buildPlusAssignOp( buildOpaqueVarRefExp(dstName), buildOpaqueVarRefExp(srcName) );
+            appendStatement(buildExprStatement(expression), condBody);      
+          }
+        }
+        else
+        {
+            SgName dstName = SgName("ind_")+ arg(pl->args[i]->plan_index)+ SgName("_s[")+ arg(i)+ SgName("_ptr[n]*" + buildStr(pl->args[i]->dim) + "]");
+            SgName srcName = argLocal(i) + SgName("[0]");
+            expression = buildPlusAssignOp( buildOpaqueVarRefExp(dstName), buildOpaqueVarRefExp(srcName) );
+            appendStatement(buildExprStatement(expression), condBody);      
+        }
+      }
+    }
+    // Append condition statement to outer loop body
+    appendStatement(cond, loopBody);
+    // Create syncfunction statement
+    kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, body);
+    // Append syncthreads
+    appendStatement(kCall, loopBody);
+    // Append outer loop to the main body
+    appendStatement(loopForLoop, mainLoopBody);
+  }
+  
   // Append main outer loop statement
-  SgExprStatement *mainLoopTest = buildExprStatement( buildLessThanOp( buildVarRefExp(mainLoopVar), buildOpaqueVarRefExp(SgName("nelem2")) ) );	
+  SgExprStatement *mainLoopTest = buildExprStatement( buildLessThanOp( buildVarRefExp(mainLoopVar), buildOpaqueVarRefExp(SgName("nelem2")) ) );  
   SgPlusAssignOp *mainLoopIncrement = buildPlusAssignOp(buildVarRefExp(mainLoopVar), buildOpaqueVarRefExp(SgName("blockDim.x")) );
   SgStatement *mainForLoop = buildForStatement(mainLoopInit, mainLoopTest, mainLoopIncrement, mainLoopBody);
   appendStatement(mainForLoop, body);
   
-	
+  
 
-	// 8. COPY DATA BACK TO DRAM
+  // 8. COPY DATA BACK TO DRAM
   // ========================================================
 
   // For write and icrement
   // Copy indirect datasets into shared memory or zero increment
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
-	{
-			if(pl->planContainer[i]->access == OP_READ)
-				continue;
-			if(pl->planContainer[i]->access == OP_MAX)
-				continue;
-			if(pl->planContainer[i]->access == OP_MIN)
-				continue;
-			
-			// Create outer loop
-			SgScopeStatement *loopBody = buildBasicBlock();
-			SgStatement *loopInit = buildVariableDeclaration( SgName("n"), buildIntType(), buildAssignInitializer(buildOpaqueVarRefExp(SgName("threadIdx.x"))) );
-			SgName loopVar = isSgVariableDeclaration(loopInit)->get_definition()->get_vardefn()->get_name();
-			SgName loopVarLimit = SgName("ind_") + arg(i) + SgName("_size");
-			SgExprStatement *loopTest = buildExprStatement( buildLessThanOp( buildVarRefExp(loopVar), buildOpaqueVarRefExp(loopVarLimit) ) );	
-			SgPlusAssignOp *loopIncrement = buildPlusAssignOp(buildOpaqueVarRefExp(loopVar), buildOpaqueVarRefExp(SgName("blockDim.x")) );
-			SgStatement *loopForLoop = buildForStatement(loopInit, loopTest, loopIncrement, loopBody);
+  {
+      if(pl->planContainer[i]->access == OP_READ)
+        continue;
+      if(pl->planContainer[i]->access == OP_MAX)
+        continue;
+      if(pl->planContainer[i]->access == OP_MIN)
+        continue;
+      
+      // Create outer loop
+      SgScopeStatement *loopBody = buildBasicBlock();
+      SgStatement *loopInit = buildVariableDeclaration( SgName("n"), buildIntType(), buildAssignInitializer(buildOpaqueVarRefExp(SgName("threadIdx.x"))) );
+      SgName loopVar = isSgVariableDeclaration(loopInit)->get_definition()->get_vardefn()->get_name();
+      SgName loopVarLimit = SgName("ind_") + arg(i) + SgName("_size");
+      SgExprStatement *loopTest = buildExprStatement( buildLessThanOp( buildVarRefExp(loopVar), buildOpaqueVarRefExp(loopVarLimit) ) );  
+      SgPlusAssignOp *loopIncrement = buildPlusAssignOp(buildOpaqueVarRefExp(loopVar), buildOpaqueVarRefExp(SgName("blockDim.x")) );
+      SgStatement *loopForLoop = buildForStatement(loopInit, loopTest, loopIncrement, loopBody);
 
-			if(pl->planContainer[i]->dim > 1)
-			{
-				// Create cached variable
-				SgExpression* e = buildOpaqueVarRefExp(SgName("ind_") + arg(i) + SgName("_ptr[n]"));
-				SgStatement *vdec = buildVariableDeclaration( SgName("ind_index"), buildIntType(), buildAssignInitializer(e) );
-				appendStatement(vdec, loopBody);
-				
-				for(int j=0; j<pl->planContainer[i]->dim; j++)
-				{
-					SgExpression* rhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("_s[" + buildStr(j) + "+n*" + buildStr(pl->planContainer[i]->dim) + "]"));
-					SgExpression* lhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("[" + buildStr(j) + "+ind_index*" + buildStr(pl->planContainer[i]->dim) + "]"));
-					expression = buildAssignOp( lhs, rhs );
-					switch(pl->planContainer[i]->access)
-					{
-					case OP_RW:
-					case OP_WRITE:
-						expression = buildAssignOp( lhs, rhs );	
-						break;
-					case OP_INC:
-						expression = buildPlusAssignOp( lhs, rhs );
-						break;
-					default:
-						break;
-					}
-					appendStatement(buildExprStatement(expression), loopBody);
-				}
-			}
-			else
-			{
-				SgExpression* rhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("_s[n*" + buildStr(pl->planContainer[i]->dim) + "]"));
-				SgExpression* lhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("[ind_" + arg(i) + "_ptr[n]*" + buildStr(pl->planContainer[i]->dim) + "]"));
-				expression = buildAssignOp( lhs, rhs );
-				appendStatement(buildExprStatement(expression), loopBody);
-			}
-			// Append outer loop to the main body
-			appendStatement(loopForLoop, body);
+      if(pl->planContainer[i]->dim > 1)
+      {
+        // Create cached variable
+        SgExpression* e = buildOpaqueVarRefExp(SgName("ind_") + arg(i) + SgName("_ptr[n]"));
+        SgStatement *vdec = buildVariableDeclaration( SgName("ind_index"), buildIntType(), buildAssignInitializer(e) );
+        appendStatement(vdec, loopBody);
+        
+        for(int j=0; j<pl->planContainer[i]->dim; j++)
+        {
+          SgExpression* rhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("_s[" + buildStr(j) + "+n*" + buildStr(pl->planContainer[i]->dim) + "]"));
+          SgExpression* lhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("[" + buildStr(j) + "+ind_index*" + buildStr(pl->planContainer[i]->dim) + "]"));
+          expression = buildAssignOp( lhs, rhs );
+          switch(pl->planContainer[i]->access)
+          {
+          case OP_RW:
+          case OP_WRITE:
+            expression = buildAssignOp( lhs, rhs );  
+            break;
+          case OP_INC:
+            expression = buildPlusAssignOp( lhs, rhs );
+            break;
+          default:
+            break;
+          }
+          appendStatement(buildExprStatement(expression), loopBody);
+        }
+      }
+      else
+      {
+        SgExpression* rhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("_s[n*" + buildStr(pl->planContainer[i]->dim) + "]"));
+        SgExpression* lhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("[ind_" + arg(i) + "_ptr[n]*" + buildStr(pl->planContainer[i]->dim) + "]"));
+        expression = buildAssignOp( lhs, rhs );
+        appendStatement(buildExprStatement(expression), loopBody);
+      }
+      // Append outer loop to the main body
+      appendStatement(loopForLoop, body);
   }
 
   // Handle post global data handling
-	postKernelGlobalDataHandling(fn, pl, body);
+  postKernelGlobalDataHandling(fn, pl, body);
 
-  // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+  // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
   
-  // The following code builds the stub function. A little of the code that is output by
-  // op2.m is not generated here, simply as it is not necessary and I was running out of
-  // time before the meeting on 27 Jan. (cudaThreadSynchronize and cudaGetLastError, and
-  // some debugging statements are missing, but would be trivial to add).
+  // The following code builds the stub function.
 
   // As usual we build a list of parameters for the function.
   paramList = buildFunctionParameterList();
@@ -1315,35 +1281,28 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   appendStatement(func, globalScope);
   body = func->get_definition()->get_body();
 
-  /*
-  By Zohirul: Add variables nargs and 'ninds'
-  Example : int nargs = 3, ninds = 2;
-  */
+  // Add variables nargs and 'ninds'
+  //Example : int nargs = 3, ninds = 2;
   
   varDec = buildVariableDeclaration(SgName("nargs"), buildIntType(), buildAssignInitializer(buildIntVal(pl->numArgs())), body);
   appendStatement(varDec,body);
   varDec = buildVariableDeclaration(SgName("ninds"), buildIntType(), buildAssignInitializer(buildIntVal(pl->planContainer.size())), body);
   appendStatement(varDec,body);
 
-	/*
-  By Zohirul: Add maximum grid size
-	Example : int gridsize = (set.size - 1) / BSIZE + 1;
-	*/
-	SgExpression *expresn = buildOpaqueVarRefExp(SgName("set.size"));
-	expresn = buildSubtractOp(expresn, buildIntVal(1));
-	expresn = buildDivideOp(expresn, buildOpaqueVarRefExp(SgName("BSIZE")));
-	expresn = buildAddOp(expresn, buildIntVal(1));
-	varDec = buildVariableDeclaration(SgName("gridsize"), buildIntType(), buildAssignInitializer(expresn));
-	appendStatement(varDec, body);
+  // Add maximum grid size
+  // Example : int gridsize = (set.size - 1) / BSIZE + 1;
+  SgExpression *expresn = buildOpaqueVarRefExp(SgName("set.size"));
+  expresn = buildSubtractOp(expresn, buildIntVal(1));
+  expresn = buildDivideOp(expresn, buildOpaqueVarRefExp(SgName("BSIZE")));
+  expresn = buildAddOp(expresn, buildIntVal(1));
+  varDec = buildVariableDeclaration(SgName("gridsize"), buildIntType(), buildAssignInitializer(expresn));
+  appendStatement(varDec, body);
   
-  /*
-  By Zohirul: Add plan variables
-  */
+  // Add plan variables
   SgExprListExp* exprList_args = buildExprListExp();
   SgExprListExp* exprList_idxs = buildExprListExp();
   SgExprListExp* exprList_ptrs = buildExprListExp();
   SgExprListExp* exprList_dims = buildExprListExp();
-  //SgExprListExp* exprList_typs = buildExprListExp();
   SgExprListExp* exprList_accs = buildExprListExp();
   SgExprListExp* exprList_inds = buildExprListExp();
 
@@ -1352,20 +1311,20 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   // will get 1.
   for(int i = 0; i < pl->numArgs(); i++)
   {
-		exprList_args->append_expression( buildPointerDerefExp(buildOpaqueVarRefExp(SgName("arg"+buildStr(i)))) );
-		if(pl->args[i]->usesIndirection())
-		{
-    	exprList_idxs->append_expression( buildOpaqueVarRefExp(SgName("idx"+buildStr(i))) );
-			exprList_ptrs->append_expression( buildPointerDerefExp(buildOpaqueVarRefExp(SgName("ptr"+buildStr(i)))) );
-		}
-		else
-		{
-			exprList_idxs->append_expression( buildIntVal(-1) );
-			exprList_ptrs->append_expression( buildOpaqueVarRefExp(SgName("OP_ID")) );
-		}
-		exprList_dims->append_expression( buildOpaqueVarRefExp(SgName(arg(i)+"->dim"))     );
-		exprList_accs->append_expression( buildOpaqueVarRefExp(SgName("acc"+buildStr(i))) );
-		exprList_inds->append_expression( buildIntVal(pl->args[i]->plan_index) );
+    exprList_args->append_expression( buildPointerDerefExp(buildOpaqueVarRefExp(SgName("arg"+buildStr(i)))) );
+    if(pl->args[i]->usesIndirection())
+    {
+      exprList_idxs->append_expression( buildOpaqueVarRefExp(SgName("idx"+buildStr(i))) );
+      exprList_ptrs->append_expression( buildPointerDerefExp(buildOpaqueVarRefExp(SgName("ptr"+buildStr(i)))) );
+    }
+    else
+    {
+      exprList_idxs->append_expression( buildIntVal(-1) );
+      exprList_ptrs->append_expression( buildOpaqueVarRefExp(SgName("OP_ID")) );
+    }
+    exprList_dims->append_expression( buildOpaqueVarRefExp(SgName(arg(i)+"->dim"))     );
+    exprList_accs->append_expression( buildOpaqueVarRefExp(SgName("acc"+buildStr(i))) );
+    exprList_inds->append_expression( buildIntVal(pl->args[i]->plan_index) );
   }
   varDec = buildVariableDeclaration( SgName("args"), buildArrayType(op_dat, buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_args), body);
   appendStatement(varDec,body);
@@ -1381,10 +1340,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   appendStatement(varDec,body);
   
 
-  /* 
-  by Zohirul : Create and initialize the Plan variable pointer
-  Example: op_plan *Plan = plan(name,set,nargs,args,idxs,ptrs,dims,typs,accs,ninds,inds);
-  */
+  // by Zohirul : Create and initialize the Plan variable pointer
+  //Example: op_plan *Plan = plan(name,set,nargs,args,idxs,ptrs,dims,typs,accs,ninds,inds);
   // Create the plan function call, 1) first create params, 2) then call the function
   SgExprListExp *planPars = buildExprListExp();
   planPars->append_expression(buildOpaqueVarRefExp(SgName("name")));
@@ -1403,26 +1360,17 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   varDec = buildVariableDeclaration( SgName("Plan"), buildPointerType(op_plan),  buildAssignInitializer(expPlanFunc), body);
   appendStatement(varDec,body);
 
-  /*
-  by Zohirul : Add block offset
-  */
+  // Add block offset
   varDec = buildVariableDeclaration(SgName("block_offset"), buildIntType(), buildAssignInitializer(buildIntVal(0)), body);
   appendStatement(varDec,body);
 
-	/*
-  by Zohirul : PRE-Handle const and global data
-  */
   preHandleConstAndGlobalData(fn, pl, body);
 
-	/*
-  by Zohirul : Add Total Time
-  */
+  // Add Total Time
   varDec = buildVariableDeclaration(SgName("total_time"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), body);
   appendStatement(varDec,body);
 
-  /*
-  by Zohirul : Add for loop for executing op_cuda_res<<<gridsize,bsize,nshared>>>
-  */
+  // Add for loop for executing op_cuda_res<<<gridsize,bsize,nshared>>>
   // Create loop body
   SgScopeStatement *blockLoopBody = buildBasicBlock();
   SgStatement *blockLoopInit = buildVariableDeclaration(SgName("col"), buildIntType(), buildAssignInitializer(buildIntVal(0)));
@@ -1437,76 +1385,76 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   appendStatement(varDec,blockLoopBody);
 
 
-	// Add the timer block
-	//-----------------------------------------
+  // Add the timer block
+  //-----------------------------------------
   /*
   float elapsed_time_ms=0.0f;
   cudaEvent_t start, stop;
   cudaEventCreate( &start );
   cudaEventCreate( &stop  );
   cudaEventRecord( start, 0 );
-	*/
+  */
   //-----------------------------------------
-	varDec = buildVariableDeclaration(SgName("elapsed_time_ms"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), body);
-	addTextForUnparser(varDec,"\ncudaEvent_t start, stop;", AstUnparseAttribute::e_after);
+  varDec = buildVariableDeclaration(SgName("elapsed_time_ms"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), body);
+  addTextForUnparser(varDec,"\ncudaEvent_t start, stop;", AstUnparseAttribute::e_after);
   appendStatement(varDec,blockLoopBody);
-	kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("start")))), body);
+  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("start")))), body);
   appendStatement(kCall,blockLoopBody);
-	kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("stop")))), body);
+  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("stop")))), body);
   appendStatement(kCall,blockLoopBody);
-	kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("start")), buildIntVal(0)), body);
-	appendStatement(kCall,blockLoopBody);
+  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("start")), buildIntVal(0)), body);
+  appendStatement(kCall,blockLoopBody);
 
 
   // To add a call to the CUDA function, we need to build a list of parameters that
   // we pass to it. The easiest way to do this is to name the members of the 
   // struct to which they belong, but this is not the most elegant approach.
   kPars = buildExprListExp();
-	{
-		// First Assemble all expressions using plan container <for arguments with indirection>
-		for(unsigned int i=0; i<pl->planContainer.size(); i++)
-		{
-			SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(pl->planContainer[i]->own_index)+"->dat_d"));
-			e = buildCastExp(e, buildPointerType(pl->planContainer[i]->type));
-			kPars->append_expression(e);
-			e = buildOpaqueVarRefExp(SgName("Plan->ind_ptrs["+buildStr(i)+"]"));
-			kPars->append_expression(e);
-			e = buildOpaqueVarRefExp(SgName("Plan->ind_sizes["+buildStr(i)+"]"));
-			kPars->append_expression(e);
-			e = buildOpaqueVarRefExp(SgName("Plan->ind_offs["+buildStr(i)+"]"));
-			kPars->append_expression(e);
-		}
-		// Then add all the pointers
-		for(unsigned int i=0; i<pl->args.size(); i++)
-		{
-			if(pl->args[i]->usesIndirection())
-			{
-				SgExpression *e = buildOpaqueVarRefExp(SgName("Plan->ptrs["+buildStr(i)+"]"));
-				kPars->append_expression(e);
-			}
-			else
-			{
-				SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(i)+"->dat_d"));
-				e = buildCastExp(e, buildPointerType(pl->args[i]->type));
-				kPars->append_expression(e);
-			}
-		}
-		// Add additional parameters
-		e = buildOpaqueVarRefExp(SgName("block_offset"));
-		kPars->append_expression(e);
-		e = buildOpaqueVarRefExp(SgName("Plan->blkmap"));
-		kPars->append_expression(e);
-		e = buildOpaqueVarRefExp(SgName("Plan->offset"));
-		kPars->append_expression(e);
-		e = buildOpaqueVarRefExp(SgName("Plan->nelems"));
-		kPars->append_expression(e);
-		e = buildOpaqueVarRefExp(SgName("Plan->nthrcol"));
-		kPars->append_expression(e);
-		e = buildOpaqueVarRefExp(SgName("Plan->thrcol"));
-		kPars->append_expression(e);
-		if(reduction_required)
-			kPars->append_expression(buildOpaqueVarRefExp(SgName("block_reduct")));
-	}
+  {
+    // First Assemble all expressions using plan container <for arguments with indirection>
+    for(unsigned int i=0; i<pl->planContainer.size(); i++)
+    {
+      SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(pl->planContainer[i]->own_index)+"->dat_d"));
+      e = buildCastExp(e, buildPointerType(pl->planContainer[i]->type));
+      kPars->append_expression(e);
+      e = buildOpaqueVarRefExp(SgName("Plan->ind_ptrs["+buildStr(i)+"]"));
+      kPars->append_expression(e);
+      e = buildOpaqueVarRefExp(SgName("Plan->ind_sizes["+buildStr(i)+"]"));
+      kPars->append_expression(e);
+      e = buildOpaqueVarRefExp(SgName("Plan->ind_offs["+buildStr(i)+"]"));
+      kPars->append_expression(e);
+    }
+    // Then add all the pointers
+    for(unsigned int i=0; i<pl->args.size(); i++)
+    {
+      if(pl->args[i]->usesIndirection())
+      {
+        SgExpression *e = buildOpaqueVarRefExp(SgName("Plan->ptrs["+buildStr(i)+"]"));
+        kPars->append_expression(e);
+      }
+      else
+      {
+        SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(i)+"->dat_d"));
+        e = buildCastExp(e, buildPointerType(pl->args[i]->type));
+        kPars->append_expression(e);
+      }
+    }
+    // Add additional parameters
+    e = buildOpaqueVarRefExp(SgName("block_offset"));
+    kPars->append_expression(e);
+    e = buildOpaqueVarRefExp(SgName("Plan->blkmap"));
+    kPars->append_expression(e);
+    e = buildOpaqueVarRefExp(SgName("Plan->offset"));
+    kPars->append_expression(e);
+    e = buildOpaqueVarRefExp(SgName("Plan->nelems"));
+    kPars->append_expression(e);
+    e = buildOpaqueVarRefExp(SgName("Plan->nthrcol"));
+    kPars->append_expression(e);
+    e = buildOpaqueVarRefExp(SgName("Plan->thrcol"));
+    kPars->append_expression(e);
+    if(reduction_required)
+      kPars->append_expression(buildOpaqueVarRefExp(SgName("block_reduct")));
+  }
 
   // We have to add the kernel configuration as part of the function name
   // as CUDA is not directly supported by ROSE - however, I understand
@@ -1515,34 +1463,34 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   appendStatement(kCall,blockLoopBody);
 
 
-	// Add the timer block
-	//------------------------------------------------------
-	/*
+  // Add the timer block
+  //------------------------------------------------------
+  /*
   cudaEventRecord( stop, 0 );
   cudaThreadSynchronize();
   cudaEventElapsedTime( &elapsed_time_ms, start, stop );
   cudaEventDestroy( start );
   cudaEventDestroy( stop );
-	total_time += elapsed_time_ms;
-	*/  
-	//------------------------------------------------------
-	kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("stop")), buildIntVal(0)), body);
+  total_time += elapsed_time_ms;
+  */  
+  //------------------------------------------------------
+  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("stop")), buildIntVal(0)), body);
   appendStatement(kCall,blockLoopBody);
-	kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, body);
-	appendStatement(kCall, blockLoopBody);
-	kCall = buildFunctionCallStmt("cudaEventElapsedTime", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("&elapsed_time_ms")), buildOpaqueVarRefExp(SgName("start")), buildOpaqueVarRefExp(SgName("stop")) ), body);
-	appendStatement(kCall, blockLoopBody);
-	kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("start")) ), body);
-	appendStatement(kCall, blockLoopBody);
-	kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("stop")) ), body);
-	appendStatement(kCall, blockLoopBody);
-	e = buildPlusAssignOp( buildOpaqueVarRefExp(SgName("total_time")), buildOpaqueVarRefExp(SgName("elapsed_time_ms")) );
-	appendStatement(buildExprStatement(e),blockLoopBody);	
+  kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, body);
+  appendStatement(kCall, blockLoopBody);
+  kCall = buildFunctionCallStmt("cudaEventElapsedTime", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("&elapsed_time_ms")), buildOpaqueVarRefExp(SgName("start")), buildOpaqueVarRefExp(SgName("stop")) ), body);
+  appendStatement(kCall, blockLoopBody);
+  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("start")) ), body);
+  appendStatement(kCall, blockLoopBody);
+  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("stop")) ), body);
+  appendStatement(kCall, blockLoopBody);
+  e = buildPlusAssignOp( buildOpaqueVarRefExp(SgName("total_time")), buildOpaqueVarRefExp(SgName("elapsed_time_ms")) );
+  appendStatement(buildExprStatement(e),blockLoopBody);  
 
 
-	// Call cuda thread synchronize
-	kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, body);
-	appendStatement(kCall, blockLoopBody);
+  // Call cuda thread synchronize
+  kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, body);
+  appendStatement(kCall, blockLoopBody);
  
   // Increment the block_offset now
   e = buildPlusAssignOp( buildOpaqueVarRefExp(SgName("block_offset")), buildOpaqueVarRefExp(SgName("nblocks")) );
@@ -1555,106 +1503,20 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   SgStatement *blockLoopForLoop = buildForStatement(blockLoopInit, blockLoopTest, blockLoopIncrement, blockLoopBody);
   appendStatement(blockLoopForLoop,body);
 
-  /*
-  by Zohirul : PRE-Handle const and global data
-  */
   postHandleConstAndGlobalData(fn, pl, body);
 
-	/*
-  by Zohirul : return statement
-  */
+  // Add return statement
   SgReturnStmt* rtstmt = buildReturnStmt(buildOpaqueVarRefExp(SgName("total_time")));
-	appendStatement(rtstmt, body);
+  appendStatement(rtstmt, body);
 
   // Add to list of files that need to be unparsed.
   kernels.push_back(file->get_project());
 }
 
 
-void OPParLoop::forwardDeclareUtilFunctions(SgGlobal* globalScope, SgType* op_set, SgType* op_dat, SgType* op_ptr, SgType* op_access, SgType* op_plan)
-{
-	/*
-  // Parameter list for "plan"
-  SgFunctionParameterTypeList *paramTypes = buildFunctionParameterTypeList();
-  paramTypes->append_argument(buildPointerType(buildConstType(buildCharType())));
-  paramTypes->append_argument(op_set);
-  paramTypes->append_argument(buildIntType());
-  paramTypes->append_argument(buildPointerType(op_dat));
-  paramTypes->append_argument(buildPointerType(buildIntType()));
-  paramTypes->append_argument(buildPointerType(op_ptr));
-  paramTypes->append_argument(buildPointerType(buildIntType()));
-  paramTypes->append_argument(buildPointerType(op_access));
-  paramTypes->append_argument(buildIntType());
-  paramTypes->append_argument(buildPointerType(buildIntType()));
-  SgFunctionParameterList *paramList = buildFunctionParameterList(paramTypes);
-  
-  // Forward declare "plan" function
-  SgFunctionDeclaration *decl = buildNondefiningFunctionDeclaration("plan",buildPointerType(op_plan),paramList,globalScope);
-  addTextForUnparser(decl,"\nextern ",AstUnparseAttribute::e_before); 
-  appendStatement(decl,globalScope);
-
-  // Parameter list for "prepare_op_dat_as_const"
-  paramTypes = buildFunctionParameterTypeList();
-  paramTypes->append_argument(buildReferenceType(op_dat));
-  paramTypes->append_argument(buildIntType());
-  paramList = buildFunctionParameterList(paramTypes);
-
-  // Forward declare "prepare_op_dat_as_const"
-  decl = buildNondefiningFunctionDeclaration("push_op_dat_as_const",buildVoidType(),paramList,globalScope);
-  addTextForUnparser(decl,"\nextern ",AstUnparseAttribute::e_before); 
-  appendStatement(decl,globalScope);
-
-  // Forward declare "prepare_op_dat_as_gbl" 
-  decl = buildNondefiningFunctionDeclaration("push_op_dat_as_reduct",buildVoidType(),deepCopy(paramList),globalScope);
-  addTextForUnparser(decl,"\nextern ",AstUnparseAttribute::e_before); 
-  appendStatement(decl,globalScope);
-
-  paramTypes = buildFunctionParameterTypeList();
-  paramTypes->append_argument(buildReferenceType(op_dat));
-  paramList = buildFunctionParameterList(paramTypes);
-
-  // Forward declare "prepare_op_dat_as_gbl" 
-  decl = buildNondefiningFunctionDeclaration("pop_op_dat_as_reduct",buildVoidType(),paramList,globalScope);
-  addTextForUnparser(decl,"\nextern ",AstUnparseAttribute::e_before); 
-  appendStatement(decl,globalScope);
-
-	// reduct and const function params
-  paramTypes = buildFunctionParameterTypeList();
-  paramTypes->append_argument(buildIntType());
-  paramList = buildFunctionParameterList(paramTypes);
-
-	// extern void reallocConstArrays(int consts_bytes)
-  decl = buildNondefiningFunctionDeclaration("reallocConstArrays",buildVoidType(),paramList,globalScope);
-  addTextForUnparser(decl,"\nextern ",AstUnparseAttribute::e_before); 
-  appendStatement(decl,globalScope);
- 
-	//extern void reallocReductArrays(int reduct_bytes)
-  decl = buildNondefiningFunctionDeclaration("reallocReductArrays",buildVoidType(),deepCopy(paramList),globalScope);
-  addTextForUnparser(decl,"\nextern ",AstUnparseAttribute::e_before); 
-  appendStatement(decl,globalScope);
-
-	//extern void mvConstArraysToDevice(int consts_bytes)
-  decl = buildNondefiningFunctionDeclaration("mvConstArraysToDevice",buildVoidType(),deepCopy(paramList),globalScope);
-  addTextForUnparser(decl,"\nextern ",AstUnparseAttribute::e_before); 
-  appendStatement(decl,globalScope);
-
-	//extern void mvReductArraysToDevice(int reduct_bytes)
-  decl = buildNondefiningFunctionDeclaration("mvReductArraysToDevice",buildVoidType(),deepCopy(paramList),globalScope);
-  addTextForUnparser(decl,"\nextern ",AstUnparseAttribute::e_before); 
-  appendStatement(decl,globalScope);
-	
-  //extern void mvReductArraysToHost(int reduct_bytes)
-	decl = buildNondefiningFunctionDeclaration("mvReductArraysToHost",buildVoidType(),deepCopy(paramList),globalScope);
-  addTextForUnparser(decl,"\nextern ",AstUnparseAttribute::e_before); 
-  appendStatement(decl,globalScope);
-	*/
-}
-
-
 
 void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body)
 {
-	//cout << "HANDLE REDUCT DATA <TRANSFER TO DEVICE>" << endl;
   for(int i=0; i<pl->numArgs(); i++)
   {
     SgStatement *viInit = buildVariableDeclaration(SgName("d"), buildIntType(), buildAssignInitializer(buildIntVal(0)));
@@ -1662,75 +1524,74 @@ void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop *
 
     if(pl->args[i]->consideredAsReduction())
     {
-	    // Build the body of the loop.
-	    SgExpression *lhs, *rhs/*, *subscript*/;
-	    lhs = buildPntrArrRefExp(buildVarRefExp(argLocal(i), body), buildVarRefExp(indVar));
-	    switch(pl->args[i]->access)
-	    {
-	      case OP_INC:
-					rhs = buildIntVal(0);
-					break;
-	      default:
-					rhs = buildPntrArrRefExp(buildVarRefExp(arg(i), body), buildVarRefExp(indVar));
-					break;
-	    }
-	    SgStatement *action = buildAssignStatement(lhs, rhs);
-	    SgStatement *viLoopBody = buildBasicBlock(action);
+      // Build the body of the loop.
+      SgExpression *lhs, *rhs;
+      lhs = buildPntrArrRefExp(buildVarRefExp(argLocal(i), body), buildVarRefExp(indVar));
+      switch(pl->args[i]->access)
+      {
+        case OP_INC:
+          rhs = buildIntVal(0);
+          break;
+        default:
+          rhs = buildPntrArrRefExp(buildVarRefExp(arg(i), body), buildVarRefExp(indVar));
+          break;
+      }
+      SgStatement *action = buildAssignStatement(lhs, rhs);
+      SgStatement *viLoopBody = buildBasicBlock(action);
 
-	    // We can build a test and an increment for the loop, then insert 
-	    // the loop into the body of the outer loop.
-	    SgExprStatement *viTest = buildExprStatement(buildLessThanOp(buildVarRefExp(indVar), buildIntVal(pl->args[i]->dim)));
-	    SgPlusPlusOp *viIncrement = buildPlusPlusOp(buildVarRefExp(indVar));
-	    SgStatement *viForLoop = buildForStatement(viInit, viTest, viIncrement, viLoopBody);
-	    appendStatement(viForLoop,body);
+      // We can build a test and an increment for the loop, then insert 
+      // the loop into the body of the outer loop.
+      SgExprStatement *viTest = buildExprStatement(buildLessThanOp(buildVarRefExp(indVar), buildIntVal(pl->args[i]->dim)));
+      SgPlusPlusOp *viIncrement = buildPlusPlusOp(buildVarRefExp(indVar));
+      SgStatement *viForLoop = buildForStatement(viInit, viTest, viIncrement, viLoopBody);
+      appendStatement(viForLoop,body);
     }
   }
 }
 
 void OPParLoop::postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body)
 {
-	//cout << "HANDLE REDUCT DATA <TRANSFER FROM DEVICE>" << endl;
   for(int i=0; i<pl->numArgs(); i++)
   {
-		if(pl->args[i]->consideredAsReduction())
-		{
-			// Create loop
-			SgStatement *viInit = buildVariableDeclaration(SgName("d"), buildIntType(), buildAssignInitializer(buildIntVal(0)));
+    if(pl->args[i]->consideredAsReduction())
+    {
+      // Create loop
+      SgStatement *viInit = buildVariableDeclaration(SgName("d"), buildIntType(), buildAssignInitializer(buildIntVal(0)));
       SgName indVar = isSgVariableDeclaration(viInit)->get_definition()->get_vardefn()->get_name();
-			      
+            
       // Call function
-		  SgExprListExp *kPars1 = buildExprListExp();
-		  SgExpression *e = buildOpaqueVarRefExp(arg(i));
-			e = buildAddOp(e, buildVarRefExp(indVar));
-		  kPars1->append_expression(e);
-			e = buildOpaqueVarRefExp(argLocal(i) + SgName("[d]"));
-			kPars1->append_expression(e);
-			e = buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i)));
-			kPars1->append_expression(e);
+      SgExprListExp *kPars1 = buildExprListExp();
+      SgExpression *e = buildOpaqueVarRefExp(arg(i));
+      e = buildAddOp(e, buildVarRefExp(indVar));
+      kPars1->append_expression(e);
+      e = buildOpaqueVarRefExp(argLocal(i) + SgName("[d]"));
+      kPars1->append_expression(e);
+      e = buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i)));
+      kPars1->append_expression(e);
 
-			SgExprStatement *uf1 = NULL;
-		  switch(pl->args[i]->access)
-		  {
-				case OP_INC:
-					uf1 = buildFunctionCallStmt(SgName("op_reduction2_1<OP_INC>"), buildVoidType(), kPars1);
-		  		break;
-				case OP_MAX:
-					uf1 = buildFunctionCallStmt(SgName("op_reduction2_1<OP_MAX>"), buildVoidType(), kPars1);
-					break;
-				case OP_MIN:
-					uf1 = buildFunctionCallStmt(SgName("op_reduction2_1<OP_MIN>"), buildVoidType(), kPars1);
-					break;
-				default:
-					break;
-		  }
+      SgExprStatement *uf1 = NULL;
+      switch(pl->args[i]->access)
+      {
+        case OP_INC:
+          uf1 = buildFunctionCallStmt(SgName("op_reduction2_1<OP_INC>"), buildVoidType(), kPars1);
+          break;
+        case OP_MAX:
+          uf1 = buildFunctionCallStmt(SgName("op_reduction2_1<OP_MAX>"), buildVoidType(), kPars1);
+          break;
+        case OP_MIN:
+          uf1 = buildFunctionCallStmt(SgName("op_reduction2_1<OP_MIN>"), buildVoidType(), kPars1);
+          break;
+        default:
+          break;
+      }
 
-			// build test and increment, and add the loop into the body of the inner loop.
-			SgScopeStatement *viLoopBody = buildBasicBlock(uf1);
+      // build test and increment, and add the loop into the body of the inner loop.
+      SgScopeStatement *viLoopBody = buildBasicBlock(uf1);
       SgExprStatement *viTest = buildExprStatement(buildLessThanOp(buildOpaqueVarRefExp(indVar), buildIntVal(pl->args[i]->dim)));
       SgPlusPlusOp *viIncrement = buildPlusPlusOp(buildOpaqueVarRefExp(indVar));
       SgStatement *viForLoop = buildForStatement(viInit, viTest, viIncrement, viLoopBody);
       appendStatement(viForLoop,body);
-		}
+    }
   }
 }
 
@@ -1739,209 +1600,208 @@ void OPParLoop::postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop 
 
 void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body)
 {
-	// Handle Reduct
-	///////////////////////
+  // Handle Reduct
+  ///////////////////////
 
-	bool required = false;
-	SgVariableDeclaration* varDec = buildVariableDeclaration(SgName("reduct_bytes"), buildIntType(), buildAssignInitializer(buildIntVal(0)), body);
-	SgName varName = isSgVariableDeclaration(varDec)->get_definition()->get_vardefn()->get_name();	
-	appendStatement(varDec,body);
+  bool required = false;
+  SgVariableDeclaration* varDec = buildVariableDeclaration(SgName("reduct_bytes"), buildIntType(), buildAssignInitializer(buildIntVal(0)), body);
+  SgName varName = isSgVariableDeclaration(varDec)->get_definition()->get_vardefn()->get_name();  
+  appendStatement(varDec,body);
 
-	SgVariableDeclaration* varDec2 = buildVariableDeclaration(SgName("reduct_size"), buildIntType(), buildAssignInitializer(buildIntVal(0)), body);
-	SgName varName2 = isSgVariableDeclaration(varDec2)->get_definition()->get_vardefn()->get_name();	
-	appendStatement(varDec2,body);
+  SgVariableDeclaration* varDec2 = buildVariableDeclaration(SgName("reduct_size"), buildIntType(), buildAssignInitializer(buildIntVal(0)), body);
+  SgName varName2 = isSgVariableDeclaration(varDec2)->get_definition()->get_vardefn()->get_name();  
+  appendStatement(varDec2,body);
 
-	SgExpression* varExp = buildVarRefExp(varName, body);
-	SgExpression* varExp2 = buildVarRefExp(varName2, body);
-	for(unsigned int i = 0; i < pl->args.size(); i++)
-	{
-		if(pl->args[i]->consideredAsReduction())
-		{
-			required = true;
-			SgExpression* rhs =  buildMultiplyOp(buildIntVal(pl->args[i]->dim), buildSizeOfOp(pl->args[i]->type));
-			SgExprListExp* list = buildExprListExp();
-			list->append_expression(rhs);
-			rhs = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), list);
-			SgExpression* expr = buildPlusAssignOp(varExp , rhs);
-  		appendStatement(buildExprStatement(expr), body);
+  SgExpression* varExp = buildVarRefExp(varName, body);
+  SgExpression* varExp2 = buildVarRefExp(varName2, body);
+  for(unsigned int i = 0; i < pl->args.size(); i++)
+  {
+    if(pl->args[i]->consideredAsReduction())
+    {
+      required = true;
+      SgExpression* rhs =  buildMultiplyOp(buildIntVal(pl->args[i]->dim), buildSizeOfOp(pl->args[i]->type));
+      SgExprListExp* list = buildExprListExp();
+      list->append_expression(rhs);
+      rhs = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), list);
+      SgExpression* expr = buildPlusAssignOp(varExp , rhs);
+      appendStatement(buildExprStatement(expr), body);
 
-			list = buildExprListExp();
-			list->append_expression(varExp2);
-			list->append_expression(buildSizeOfOp(pl->args[i]->type));
-			rhs = buildFunctionCallExp(SgName("MAX"), buildIntType(), list);
-			expr = buildAssignOp(varExp2, rhs);
-			appendStatement(buildExprStatement(expr), body);
-		}
-	}
+      list = buildExprListExp();
+      list->append_expression(varExp2);
+      list->append_expression(buildSizeOfOp(pl->args[i]->type));
+      rhs = buildFunctionCallExp(SgName("MAX"), buildIntType(), list);
+      expr = buildAssignOp(varExp2, rhs);
+      appendStatement(buildExprStatement(expr), body);
+    }
+  }
 
-	SgExpression* expShared = buildMultiplyOp( varExp2, buildDivideOp(buildOpaqueVarRefExp(SgName("BSIZE")), buildIntVal(2)) );
-	SgVariableDeclaration* varDec3 = buildVariableDeclaration(SgName("reduct_shared"), buildIntType(), buildAssignInitializer(expShared), body);
-	SgName varName3 = isSgVariableDeclaration(varDec2)->get_definition()->get_vardefn()->get_name();	
-	appendStatement(varDec3,body);
-	//SgExpression* varExp3 = buildVarRefExp(varName3, body);
-
-  if(required)
-	{
-		// call reallocReductArrays(reduct_bytes);
-		SgExprListExp* kPars = buildExprListExp();
-		kPars->append_expression(varExp);
-		SgStatement *kCall = buildFunctionCallStmt("reallocReductArrays", buildVoidType(), kPars, body);
-  		appendStatement(kCall, body);
-
-		// fixup with reduct_bytes
-		SgExpression* expr = buildAssignOp(varExp, buildIntVal(0));
-		appendStatement(buildExprStatement(expr), body);
-		
-		for(unsigned int i = 0; i < pl->args.size(); i++)
-		{
-			if(pl->args[i]->consideredAsReduction())
-			{
-				kPars = buildExprListExp();
-				kPars->append_expression((buildOpaqueVarRefExp(SgName("*"+arg(i)))));
-				kPars->append_expression(varExp);
-				kCall = buildFunctionCallStmt("push_op_dat_as_reduct", buildVoidType(), kPars, body);
-				appendStatement(kCall,body);
-
-				expr =  buildMultiplyOp(buildIntVal(pl->args[i]->dim), buildSizeOfOp(pl->args[i]->type));
-				SgExprListExp* expressions = buildExprListExp();
-				expressions->append_expression(expr);
-				expr = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), expressions);
-				expr = buildPlusAssignOp(varExp , expr);
-  			appendStatement(buildExprStatement(expr), body);
-			}
-		}
-
-		// call mvReductArraysToDevice(reduct_bytes)
-		kPars = buildExprListExp();
-		kPars->append_expression(varExp);
-		kCall = buildFunctionCallStmt("mvReductArraysToDevice", buildVoidType(), kPars, body);
-  	appendStatement(kCall,body);
-
-		// handling global reduction - requires global memory allocation
-		for(unsigned int i = 0; i < pl->args.size(); i++)
-		{
-			if(pl->args[i]->consideredAsReduction())
-			{
-				// declare block_reduct
-				varDec = buildVariableDeclaration(SgName("block_reduct" + buildStr(i)), buildPointerType(buildVoidType()), buildAssignInitializer(buildIntVal(0)));
-				appendStatement(varDec, body);
-
-				// allocate memory
-				kPars = buildExprListExp();
-				kPars->append_expression(buildAddressOfOp( buildOpaqueVarRefExp(SgName("block_reduct") + buildStr(i)) ));
-				kPars->append_expression(buildMultiplyOp( buildOpaqueVarRefExp(SgName("gridsize")), buildSizeOfOp(pl->args[i]->type) ));
-				kCall = buildFunctionCallStmt("cudaMalloc", buildVoidType(), kPars, body);
-  			appendStatement(kCall,body);
-			}
-		}
-	}
-
-
-	// Handle Const
-	///////////////////////
-
-	required = false;
-	varDec = buildVariableDeclaration(SgName("const_bytes"), buildIntType(), buildAssignInitializer(buildIntVal(0)), body);
-	varName = isSgVariableDeclaration(varDec)->get_definition()->get_vardefn()->get_name();	
-	appendStatement(varDec,body);
-	varExp = buildVarRefExp(varName, body);
-	for(unsigned int i = 0; i < pl->args.size(); i++)
-	{
-		if(pl->args[i]->consideredAsConst())
-		{
-			required = true;
-			SgExpression* rhs =  buildMultiplyOp(buildIntVal(pl->args[i]->dim), buildSizeOfOp(pl->args[i]->type));
-			SgExprListExp* expressions = buildExprListExp();
-			expressions->append_expression(rhs);
-			rhs = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), expressions);
-			SgExpression* expr = buildPlusAssignOp(varExp , rhs);
-  		appendStatement(buildExprStatement(expr), body);
-		}
-	}
+  SgExpression* expShared = buildMultiplyOp( varExp2, buildDivideOp(buildOpaqueVarRefExp(SgName("BSIZE")), buildIntVal(2)) );
+  SgVariableDeclaration* varDec3 = buildVariableDeclaration(SgName("reduct_shared"), buildIntType(), buildAssignInitializer(expShared), body);
+  SgName varName3 = isSgVariableDeclaration(varDec2)->get_definition()->get_vardefn()->get_name();  
+  appendStatement(varDec3,body);
 
   if(required)
-	{
-		// call reallocConstArrays(reduct_bytes);
-		SgExprListExp* kPars = buildExprListExp();
-		kPars->append_expression(varExp);
-		SgStatement *kCall = buildFunctionCallStmt("reallocConstArrays", buildVoidType(), kPars, body);
-  	appendStatement(kCall, body);
+  {
+    // call reallocReductArrays(reduct_bytes);
+    SgExprListExp* kPars = buildExprListExp();
+    kPars->append_expression(varExp);
+    SgStatement *kCall = buildFunctionCallStmt("reallocReductArrays", buildVoidType(), kPars, body);
+      appendStatement(kCall, body);
 
-		// fixup with reduct_bytes
-		SgExpression* expr = buildAssignOp(varExp, buildIntVal(0));
-		appendStatement(buildExprStatement(expr), body);
-		
-		for(unsigned int i = 0; i < pl->args.size(); i++)
-		{
-			if(pl->args[i]->consideredAsConst())
-			{
-				kPars = buildExprListExp();
-				kPars->append_expression((buildOpaqueVarRefExp(SgName("*"+arg(i)))));
-				kPars->append_expression(varExp);
-				kCall = buildFunctionCallStmt("push_op_dat_as_const", buildVoidType(), kPars, body);
-				appendStatement(kCall,body);
+    // fixup with reduct_bytes
+    SgExpression* expr = buildAssignOp(varExp, buildIntVal(0));
+    appendStatement(buildExprStatement(expr), body);
+    
+    for(unsigned int i = 0; i < pl->args.size(); i++)
+    {
+      if(pl->args[i]->consideredAsReduction())
+      {
+        kPars = buildExprListExp();
+        kPars->append_expression((buildOpaqueVarRefExp(SgName("*"+arg(i)))));
+        kPars->append_expression(varExp);
+        kCall = buildFunctionCallStmt("push_op_dat_as_reduct", buildVoidType(), kPars, body);
+        appendStatement(kCall,body);
 
-				expr =  buildMultiplyOp(buildIntVal(pl->args[i]->dim), buildSizeOfOp(pl->args[i]->type));
-				SgExprListExp* expressions = buildExprListExp();
-				expressions->append_expression(expr);
-				expr = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), expressions);
-				expr = buildPlusAssignOp(varExp , expr);
-  			appendStatement(buildExprStatement(expr), body);
-			}
-		}
+        expr =  buildMultiplyOp(buildIntVal(pl->args[i]->dim), buildSizeOfOp(pl->args[i]->type));
+        SgExprListExp* expressions = buildExprListExp();
+        expressions->append_expression(expr);
+        expr = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), expressions);
+        expr = buildPlusAssignOp(varExp , expr);
+        appendStatement(buildExprStatement(expr), body);
+      }
+    }
 
-		// call mvReductArraysToDevice(reduct_bytes)
-		kPars = buildExprListExp();
-		kPars->append_expression(varExp);
-		kCall = buildFunctionCallStmt("mvConstArraysToDevice", buildVoidType(), kPars, body);
-  	appendStatement(kCall,body);
-	}
+    // call mvReductArraysToDevice(reduct_bytes)
+    kPars = buildExprListExp();
+    kPars->append_expression(varExp);
+    kCall = buildFunctionCallStmt("mvReductArraysToDevice", buildVoidType(), kPars, body);
+    appendStatement(kCall,body);
+
+    // handling global reduction - requires global memory allocation
+    for(unsigned int i = 0; i < pl->args.size(); i++)
+    {
+      if(pl->args[i]->consideredAsReduction())
+      {
+        // declare block_reduct
+        varDec = buildVariableDeclaration(SgName("block_reduct" + buildStr(i)), buildPointerType(buildVoidType()), buildAssignInitializer(buildIntVal(0)));
+        appendStatement(varDec, body);
+
+        // allocate memory
+        kPars = buildExprListExp();
+        kPars->append_expression(buildAddressOfOp( buildOpaqueVarRefExp(SgName("block_reduct") + buildStr(i)) ));
+        kPars->append_expression(buildMultiplyOp( buildOpaqueVarRefExp(SgName("gridsize")), buildSizeOfOp(pl->args[i]->type) ));
+        kCall = buildFunctionCallStmt("cudaMalloc", buildVoidType(), kPars, body);
+        appendStatement(kCall,body);
+      }
+    }
+  }
+
+
+  // Handle Const
+  ///////////////////////
+
+  required = false;
+  varDec = buildVariableDeclaration(SgName("const_bytes"), buildIntType(), buildAssignInitializer(buildIntVal(0)), body);
+  varName = isSgVariableDeclaration(varDec)->get_definition()->get_vardefn()->get_name();  
+  appendStatement(varDec,body);
+  varExp = buildVarRefExp(varName, body);
+  for(unsigned int i = 0; i < pl->args.size(); i++)
+  {
+    if(pl->args[i]->consideredAsConst())
+    {
+      required = true;
+      SgExpression* rhs =  buildMultiplyOp(buildIntVal(pl->args[i]->dim), buildSizeOfOp(pl->args[i]->type));
+      SgExprListExp* expressions = buildExprListExp();
+      expressions->append_expression(rhs);
+      rhs = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), expressions);
+      SgExpression* expr = buildPlusAssignOp(varExp , rhs);
+      appendStatement(buildExprStatement(expr), body);
+    }
+  }
+
+  if(required)
+  {
+    // call reallocConstArrays(reduct_bytes);
+    SgExprListExp* kPars = buildExprListExp();
+    kPars->append_expression(varExp);
+    SgStatement *kCall = buildFunctionCallStmt("reallocConstArrays", buildVoidType(), kPars, body);
+    appendStatement(kCall, body);
+
+    // fixup with reduct_bytes
+    SgExpression* expr = buildAssignOp(varExp, buildIntVal(0));
+    appendStatement(buildExprStatement(expr), body);
+    
+    for(unsigned int i = 0; i < pl->args.size(); i++)
+    {
+      if(pl->args[i]->consideredAsConst())
+      {
+        kPars = buildExprListExp();
+        kPars->append_expression((buildOpaqueVarRefExp(SgName("*"+arg(i)))));
+        kPars->append_expression(varExp);
+        kCall = buildFunctionCallStmt("push_op_dat_as_const", buildVoidType(), kPars, body);
+        appendStatement(kCall,body);
+
+        expr =  buildMultiplyOp(buildIntVal(pl->args[i]->dim), buildSizeOfOp(pl->args[i]->type));
+        SgExprListExp* expressions = buildExprListExp();
+        expressions->append_expression(expr);
+        expr = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), expressions);
+        expr = buildPlusAssignOp(varExp , expr);
+        appendStatement(buildExprStatement(expr), body);
+      }
+    }
+
+    // call mvReductArraysToDevice(reduct_bytes)
+    kPars = buildExprListExp();
+    kPars->append_expression(varExp);
+    kCall = buildFunctionCallStmt("mvConstArraysToDevice", buildVoidType(), kPars, body);
+    appendStatement(kCall,body);
+  }
 }
 
 void OPParLoop::postHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body)
 {
-	// Handle Reduct
-	///////////////////////
+  // Handle Reduct
+  ///////////////////////
 
-	bool required = false;
-	for(unsigned int i = 0; i < pl->args.size(); i++)
-	{
-		if(pl->args[i]->consideredAsReduction())
-		{
-			required = true;
-			break;
-		}
-	}
-	if(required)
-	{
-		// call reallocReductArrays(reduct_bytes);
-		SgExprListExp* kPars = buildExprListExp();
-		kPars->append_expression(buildOpaqueVarRefExp(SgName("reduct_bytes")));
-		SgStatement *kCall = buildFunctionCallStmt("mvReductArraysToHost", buildVoidType(), kPars, body);
-	  appendStatement(kCall, body);
+  bool required = false;
+  for(unsigned int i = 0; i < pl->args.size(); i++)
+  {
+    if(pl->args[i]->consideredAsReduction())
+    {
+      required = true;
+      break;
+    }
+  }
+  if(required)
+  {
+    // call reallocReductArrays(reduct_bytes);
+    SgExprListExp* kPars = buildExprListExp();
+    kPars->append_expression(buildOpaqueVarRefExp(SgName("reduct_bytes")));
+    SgStatement *kCall = buildFunctionCallStmt("mvReductArraysToHost", buildVoidType(), kPars, body);
+    appendStatement(kCall, body);
 
     for(unsigned int i = 0; i < pl->args.size(); i++)
-		{
-			if(pl->args[i]->consideredAsReduction())
-			{
+    {
+      if(pl->args[i]->consideredAsReduction())
+      {
         kPars = buildExprListExp();
-				kPars->append_expression(buildOpaqueVarRefExp(SgName("*"+arg(i))));
-				kCall = buildFunctionCallStmt("pop_op_dat_as_reduct", buildVoidType(), kPars, body);
-	 			appendStatement(kCall, body);
+        kPars->append_expression(buildOpaqueVarRefExp(SgName("*"+arg(i))));
+        kCall = buildFunctionCallStmt("pop_op_dat_as_reduct", buildVoidType(), kPars, body);
+         appendStatement(kCall, body);
 
-				// free block_reduct memory
-				kPars = buildExprListExp();
-				kPars->append_expression( buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
-				kCall = buildFunctionCallStmt("cudaFree", buildVoidType(), kPars, body);
-				appendStatement(kCall,body);
-			}
-		}
-	}
+        // free block_reduct memory
+        kPars = buildExprListExp();
+        kPars->append_expression( buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
+        kCall = buildFunctionCallStmt("cudaFree", buildVoidType(), kPars, body);
+        appendStatement(kCall,body);
+      }
+    }
+  }
 
-	// Handle Const
-	///////////////////////
-	
-	// We dont need to do anything here for const
+  // Handle Const
+  ///////////////////////
+  
+  // We dont need to do anything here for const
 }
 
 

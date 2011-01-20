@@ -163,9 +163,13 @@ void OPParLoop::visit(SgNode *n)
     
     // Generate kernels
     if(parLoopArgs->numIndArgs() == 0)
+    {
       generateSpecial(fn, parLoopArgs);
+    }
     else
+    {
       generateStandard(fn, parLoopArgs);
+    }
   }
 }
 

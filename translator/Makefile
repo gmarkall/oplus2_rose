@@ -31,18 +31,18 @@ ROSELIBS:=-L${ROSEDIR}/lib -lrose
 ROSEINCLUDE:=-I${ROSEDIR}/include
 
 DEBUG = -g
-CXXFLAGS = $(ROSELIBS) $(ROSEINCLUDE) $(DEBUG)
+CXXFLAGS = $(ROSEINCLUDE) $(DEBUG) -Wall
+LDFLAGS = $(ROSELIBS)
 
-# -I/home/zs1109/install/BOOST_INSTALL/include
-#NVCCFLAGS := -arch sm_20
-#NVCCFLAGS += -g
-#NVCCFLAGS += -Xptxas -v
-#NVCCFLAGS += -G
+.SUFFIXES: .cpp .o
+
+%.o:	%.cpp
+	$(CXX) $(CXXFLAGS) -c $<
 
 all: op2rose
 
-op2rose: op2rose.cpp rose_op2argument.cpp rose_op2parloop.cpp rose_op2source.cpp rose_op2build.cpp
-	g++ $(CXXFLAGS) rose_op2build.cpp rose_op2argument.cpp rose_op2parloop.cpp rose_op2source.cpp op2rose.cpp -o op2rose
+op2rose: op2rose.o rose_op2argument.o rose_op2parloop.o rose_op2source.o rose_op2build.o
+	g++ $(ROSELIBS) $^ -o op2rose
 
 clean:
-	rm -f op2rose
+	rm -f op2rose *.o

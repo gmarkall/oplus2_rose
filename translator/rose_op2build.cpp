@@ -48,7 +48,7 @@ void OPBuild::setParLoop(OPParLoop* pl)
  */
 SgType* OPBuild::getTypeFromExpression(SgExpression* e)
 {
-	SgVarRefExp* ref = NULL;
+	//SgVarRefExp* ref = NULL;
 	if(isSgAddressOfOp(e))
 	{
 		return isSgPointerType(isSgAddressOfOp(e)->get_type())->get_base_type();
@@ -76,7 +76,7 @@ void OPBuild::generateBuildFile()
   
 	// Add shared const variables
 	cout << "Adding shared const variables" << endl;
-	for(int i = 0; i < sharedConstVariables.size() ; ++i)
+	for(unsigned int i = 0; i < sharedConstVariables.size() ; ++i)
   {
 		SgVariableDeclaration* stmt2 = isSgVariableDeclaration(sharedConstVariables[i]);
 		SgVariableDeclaration *varDec = buildVariableDeclaration(
@@ -122,7 +122,7 @@ void OPBuild::visit(SgNode *n)
     if(fn_name.compare("op_decl_const")==0) 
     {
 			SgExpressionPtrList& args = fn->get_args()->get_expressions();
-      int dim = isSgIntVal(args[0])->get_value();
+      //int dim = isSgIntVal(args[0])->get_value();
 
 			SgVarRefExp* varRef = isSgVarRefExp(args[1]);
 			if(!varRef)

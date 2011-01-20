@@ -226,8 +226,8 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
   // In order to build the prototype for the plan function, we need to get hold of the types 
   // that we intend to pass it. Since these are declared in op_datatypes.h, we need to 
   // loop them up before we can use them.
-  SgFunctionParameterTypeList *paramTypes = buildFunctionParameterTypeList();
-  SgType *op_set, *op_dat, *op_ptr, *op_access, *op_datatype, *op_plan;
+  //SgFunctionParameterTypeList *paramTypes = buildFunctionParameterTypeList();
+  SgType *op_set, *op_dat, *op_ptr, *op_access, /* *op_datatype,*/ *op_plan;
   op_set = lookupNamedTypeInParentScopes("op_set");
   op_dat = SgClassType::createType(buildStructDeclaration(SgName("op_dat<void>"), globalScope));
   op_ptr = lookupNamedTypeInParentScopes("op_ptr");
@@ -249,7 +249,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
   // We need to build a list of parameters for our __global__ function,
   // based on the arguments given to op_par_loop_3 earlier:
   SgFunctionParameterList *paramList = buildFunctionParameterList();
-  SgInitializedName *initName;
+  //SgInitializedName *initName;
 	bool reduction_required = false;
   for(int i=0; i<pl->numArgs(); i++)
   {
@@ -410,6 +410,8 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
 						break;
 					case OP_MIN:
 						uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_MIN>"), buildVoidType(), kPars2);
+						break;
+					default:
 						break;
 				}
 
@@ -618,7 +620,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   // In order to build the prototype for the plan function, we need to get hold of the types 
   // that we intend to pass it. Since these are declared in op_datatypes.h, we need to 
   // loop them up before we can use them.
-  SgType *op_set, *op_dat, *op_ptr, *op_access, *op_datatype, *op_plan;
+  SgType *op_set, *op_dat, *op_ptr, *op_access,/* *op_datatype,*/ *op_plan;
   op_set = lookupNamedTypeInParentScopes("op_set");
   op_dat = SgClassType::createType(buildStructDeclaration(SgName("op_dat<void>"), globalScope));
   op_ptr = lookupNamedTypeInParentScopes("op_ptr");
@@ -636,7 +638,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   SgInitializedName *nm = NULL;
   
 	// First Assemble all expressions using plan container <for arguments with indirection>
-	for(int i=0; i<pl->planContainer.size(); i++)
+	for(unsigned int i=0; i<pl->planContainer.size(); i++)
 	{
 		// Add "ind_arg0"
 		argType = buildPointerType(pl->planContainer[i]->type);
@@ -658,7 +660,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 	}
 	// Then add all the pointers
 	bool reduction_required = false;
-	for(int i=0; i<pl->args.size(); i++)
+	for(unsigned int i=0; i<pl->args.size(); i++)
 	{
 		if(pl->args[i]->consideredAsReduction())
 			reduction_required = true;
@@ -734,7 +736,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   appendStatement(varDec,body);
 
 	// Add shared variables for the planContainer variables - for each category <ptr>
-	for(int i=0; i<pl->planContainer.size(); i++)
+	for(unsigned int i=0; i<pl->planContainer.size(); i++)
 	{
 		SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_ptr"), buildPointerType(buildIntType()), NULL, body);
   	addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
@@ -742,7 +744,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 	}
 
 	// Add shared variables for the planContainer variables - for each category <size>
-	for(int i=0; i<pl->planContainer.size(); i++)
+	for(unsigned int i=0; i<pl->planContainer.size(); i++)
 	{
 		SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_size"), buildIntType(), NULL, body);
   	addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
@@ -750,7 +752,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 	}
 
 	// Add shared variables for the planContainer variables - for each category <s for shared>
-	for(int i=0; i<pl->planContainer.size(); i++)
+	for(unsigned int i=0; i<pl->planContainer.size(); i++)
 	{
 		SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_s"), buildPointerType(pl->planContainer[i]->type), NULL, body);
   	addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
@@ -758,7 +760,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 	}
 
 	// Then add respective shared variables for each argument
-	for(int i=0; i<pl->args.size(); i++)
+	for(unsigned int i=0; i<pl->args.size(); i++)
 	{
 		if(pl->args[i]->usesIndirection())
 		{
@@ -844,7 +846,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   appendStatement(buildExprStatement(expression), ifBody);
 
 	// Calculate the category sizes
-	for(int i=0; i<pl->planContainer.size(); i++)
+	for(unsigned int i=0; i<pl->planContainer.size(); i++)
 	{
 		expression = buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_sizes[blockId]"));
 		expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_size")), expression);
@@ -852,7 +854,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 	}
 
 	// Calculate the category pointers
-	for(int i=0; i<pl->planContainer.size(); i++)
+	for(unsigned int i=0; i<pl->planContainer.size(); i++)
 	{
 		expression = buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_offset[blockId]"));
 		expression = buildAddOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_ptrs")), expression);
@@ -862,7 +864,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 
 	// Calculate argument pointers
 	expression = buildOpaqueVarRefExp(SgName("cur_offset"));
-	for(int i=0; i<pl->args.size(); i++)
+	for(unsigned int i=0; i<pl->args.size(); i++)
 	{
 		if(pl->args[i]->usesIndirection())
 		{
@@ -880,7 +882,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 	}
 
 	// Set Shared Memory Pointers
-	for(int i=0; i<pl->planContainer.size(); i++)
+	for(unsigned int i=0; i<pl->planContainer.size(); i++)
 	{
 		if(i==0)
 		{
@@ -913,7 +915,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 
 	// 4.3 COPY INDIRECT DATA SETS INTO SHARED MEMORY
   // ========================================================
-  for(int i=0; i<pl->planContainer.size(); i++)
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
 	{
 		// Create outer loop
 		SgScopeStatement *loopBody = buildBasicBlock();
@@ -953,6 +955,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 					case OP_INC:
 						asgnExpr = buildIntVal(0);
 						break;
+					default:
+						break;
 				}
 				expression = buildAssignOp( buildOpaqueVarRefExp(indrvar), asgnExpr );
 				appendStatement(buildExprStatement(expression), loopBody);
@@ -974,6 +978,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 					break;
 				case OP_INC:
 					asgnExpr = buildIntVal(0);
+					break;
+				default:
 					break;
 			}
 			expression = buildAssignOp( buildOpaqueVarRefExp(indrvar), asgnExpr );
@@ -1216,7 +1222,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 
   // For write and icrement
   // Copy indirect datasets into shared memory or zero increment
-  for(int i=0; i<pl->planContainer.size(); i++)
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
 	{
 			if(pl->planContainer[i]->access == OP_READ)
 				continue;
@@ -1254,6 +1260,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 						break;
 					case OP_INC:
 						expression = buildPlusAssignOp( lhs, rhs );
+						break;
+					default:
 						break;
 					}
 					appendStatement(buildExprStatement(expression), loopBody);
@@ -1335,7 +1343,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   SgExprListExp* exprList_idxs = buildExprListExp();
   SgExprListExp* exprList_ptrs = buildExprListExp();
   SgExprListExp* exprList_dims = buildExprListExp();
-  SgExprListExp* exprList_typs = buildExprListExp();
+  //SgExprListExp* exprList_typs = buildExprListExp();
   SgExprListExp* exprList_accs = buildExprListExp();
   SgExprListExp* exprList_inds = buildExprListExp();
 
@@ -1456,7 +1464,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
   kPars = buildExprListExp();
 	{
 		// First Assemble all expressions using plan container <for arguments with indirection>
-		for(int i=0; i<pl->planContainer.size(); i++)
+		for(unsigned int i=0; i<pl->planContainer.size(); i++)
 		{
 			SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(pl->planContainer[i]->own_index)+"->dat_d"));
 			e = buildCastExp(e, buildPointerType(pl->planContainer[i]->type));
@@ -1469,7 +1477,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 			kPars->append_expression(e);
 		}
 		// Then add all the pointers
-		for(int i=0; i<pl->args.size(); i++)
+		for(unsigned int i=0; i<pl->args.size(); i++)
 		{
 			if(pl->args[i]->usesIndirection())
 			{
@@ -1655,7 +1663,7 @@ void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop *
     if(pl->args[i]->consideredAsReduction())
     {
 	    // Build the body of the loop.
-	    SgExpression *lhs, *rhs, *subscript;
+	    SgExpression *lhs, *rhs/*, *subscript*/;
 	    lhs = buildPntrArrRefExp(buildVarRefExp(argLocal(i), body), buildVarRefExp(indVar));
 	    switch(pl->args[i]->access)
 	    {
@@ -1712,6 +1720,8 @@ void OPParLoop::postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop 
 				case OP_MIN:
 					uf1 = buildFunctionCallStmt(SgName("op_reduction2_1<OP_MIN>"), buildVoidType(), kPars1);
 					break;
+				default:
+					break;
 		  }
 
 			// build test and increment, and add the loop into the body of the inner loop.
@@ -1743,7 +1753,7 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *
 
 	SgExpression* varExp = buildVarRefExp(varName, body);
 	SgExpression* varExp2 = buildVarRefExp(varName2, body);
-	for(int i = 0; i < pl->args.size(); i++)
+	for(unsigned int i = 0; i < pl->args.size(); i++)
 	{
 		if(pl->args[i]->consideredAsReduction())
 		{
@@ -1768,7 +1778,7 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *
 	SgVariableDeclaration* varDec3 = buildVariableDeclaration(SgName("reduct_shared"), buildIntType(), buildAssignInitializer(expShared), body);
 	SgName varName3 = isSgVariableDeclaration(varDec2)->get_definition()->get_vardefn()->get_name();	
 	appendStatement(varDec3,body);
-	SgExpression* varExp3 = buildVarRefExp(varName3, body);
+	//SgExpression* varExp3 = buildVarRefExp(varName3, body);
 
   if(required)
 	{
@@ -1782,7 +1792,7 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *
 		SgExpression* expr = buildAssignOp(varExp, buildIntVal(0));
 		appendStatement(buildExprStatement(expr), body);
 		
-		for(int i = 0; i < pl->args.size(); i++)
+		for(unsigned int i = 0; i < pl->args.size(); i++)
 		{
 			if(pl->args[i]->consideredAsReduction())
 			{
@@ -1808,7 +1818,7 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *
   	appendStatement(kCall,body);
 
 		// handling global reduction - requires global memory allocation
-		for(int i = 0; i < pl->args.size(); i++)
+		for(unsigned int i = 0; i < pl->args.size(); i++)
 		{
 			if(pl->args[i]->consideredAsReduction())
 			{
@@ -1835,7 +1845,7 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *
 	varName = isSgVariableDeclaration(varDec)->get_definition()->get_vardefn()->get_name();	
 	appendStatement(varDec,body);
 	varExp = buildVarRefExp(varName, body);
-	for(int i = 0; i < pl->args.size(); i++)
+	for(unsigned int i = 0; i < pl->args.size(); i++)
 	{
 		if(pl->args[i]->consideredAsConst())
 		{
@@ -1861,7 +1871,7 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *
 		SgExpression* expr = buildAssignOp(varExp, buildIntVal(0));
 		appendStatement(buildExprStatement(expr), body);
 		
-		for(int i = 0; i < pl->args.size(); i++)
+		for(unsigned int i = 0; i < pl->args.size(); i++)
 		{
 			if(pl->args[i]->consideredAsConst())
 			{
@@ -1894,7 +1904,7 @@ void OPParLoop::postHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop 
 	///////////////////////
 
 	bool required = false;
-	for(int i = 0; i < pl->args.size(); i++)
+	for(unsigned int i = 0; i < pl->args.size(); i++)
 	{
 		if(pl->args[i]->consideredAsReduction())
 		{
@@ -1910,7 +1920,7 @@ void OPParLoop::postHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop 
 		SgStatement *kCall = buildFunctionCallStmt("mvReductArraysToHost", buildVoidType(), kPars, body);
 	  appendStatement(kCall, body);
 
-    for(int i = 0; i < pl->args.size(); i++)
+    for(unsigned int i = 0; i < pl->args.size(); i++)
 		{
 			if(pl->args[i]->consideredAsReduction())
 			{

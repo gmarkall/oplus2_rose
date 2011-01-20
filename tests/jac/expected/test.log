@@ -1,0 +1,46 @@
+
+  OP diagnostic output
+  --------------------
+
+       set       size
+  -------------------
+     nodes         25
+     edges        105
+
+       ptr        dim       from         to
+  -----------------------------------------
+    pedge1          1      edges      nodes
+    pedge2          1      edges      nodes
+
+       dat        dim        set
+  ------------------------------
+       p_A          1      edges
+       p_r          1      nodes
+       p_u          1      nodes
+      p_du          1      nodes
+
+ new execution plan #0
+ number of blocks = 1
+ *** OP_plan_check: nelems   OK 
+ *** OP_plan_check: offset   OK 
+ *** OP_plan_check: blkmap   OK 
+ *** OP_plan_check: ind_offs OK 
+ *** OP_plan_check: ind_ptrs OK 
+ *** OP_plan_check: ptrs     OK 
+ *** Number of Colors:1 
+
+ u max/rms = 0.500000 0.264575 
+
+ old execution plan #0
+
+ u max/rms = 0.625000 0.386491 
+
+
+  Results after 2 iterations:
+
+  0.6250  0.4375  0.3750  0.4375  0.6250
+  0.4375  0.1250  0.0625  0.1250  0.4375
+  0.3750  0.0625  0.0000  0.0625  0.3750
+  0.4375  0.1250  0.0625  0.1250  0.4375
+  0.6250  0.4375  0.3750  0.4375  0.6250
+

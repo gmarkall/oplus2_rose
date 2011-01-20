@@ -1,0 +1,26 @@
+ number of blocks = 38
+ *** OP_plan_check: nelems   OK 
+ *** OP_plan_check: offset   OK 
+ *** OP_plan_check: blkmap   OK 
+ *** OP_plan_check: ind_offs OK 
+ *** OP_plan_check: ind_ptrs OK 
+ *** OP_plan_check: ptrs     OK 
+ *** Number of Colors:2 
+ number of blocks = 50
+ *** OP_plan_check: nelems   OK 
+ *** OP_plan_check: offset   OK 
+ *** OP_plan_check: blkmap   OK 
+ *** OP_plan_check: ind_offs OK 
+ *** OP_plan_check: ind_ptrs OK 
+ *** OP_plan_check: ptrs     OK 
+ *** Number of Colors:5 
+ 1  1.08822e-02 
+ 2  1.00002e-02 
+ 3  9.00269e-03 
+ 4  7.99103e-03 
+ 5  7.08371e-03 
+ 6  6.40076e-03 
+ 7  6.02162e-03 
+ 8  5.93279e-03 
+ 9  6.02492e-03 
+ 10  6.15485e-03 

@@ -64,8 +64,62 @@ class op_argument
     bool consideredAsConst();
 
     op_argument(SgExpressionPtrList::iterator &i);
-  
-  protected:
+    op_access getAccess() const
+    {
+        return access;
+    }
+
+    SgVarRefExp *getArg() const
+    {
+        return arg;
+    }
+
+    int getDim() const
+    {
+        return dim;
+    }
+
+    bool getGlobal() const
+    {
+        return global;
+    }
+
+    int getIndex() const
+    {
+        return index;
+    }
+
+    static const int getNum_params() const
+    {
+        return num_params;
+    }
+
+    int getOwn_index() const
+    {
+        return own_index;
+    }
+
+    int getPlan_index() const
+    {
+        return plan_index;
+    }
+
+    SgExpression *getPtr() const
+    {
+        return ptr;
+    }
+
+    SgType *getType() const
+    {
+        return type;
+    }
+
+    void setDim(int dim)
+    {
+        this->dim = dim;
+    }
+
+protected:
     SgVarRefExp* getSgVarRefExp(SgExpression* i);
     SgType* getSgTypeFromVarRef(SgVarRefExp* arg);
 		int getDimFromVarRef(SgVarRefExp* arg, bool isGlobal);

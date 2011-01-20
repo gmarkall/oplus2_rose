@@ -73,7 +73,7 @@ void OPSource::fixParLoops(SgNode *n)
       }
       exprs.erase(exprs.begin());
 
-      SgExpressionPtrList::iterator it = exprs.begin() + op_par_loop::num_params - 1;
+      SgExpressionPtrList::iterator it = exprs.begin() + op_par_loop_args::num_params - 1;
       for(; it != exprs.end(); it += op_argument::num_params)
       {
         *it = buildCastExp( *it, buildPointerType(SgClassType::createType( buildStructDeclaration("op_dat<void>"))) );

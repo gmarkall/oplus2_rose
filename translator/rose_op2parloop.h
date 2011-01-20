@@ -42,7 +42,9 @@ using namespace std;
 using namespace SageBuilder;
 using namespace SageInterface;
 
-class op_par_loop
+// The choice of name for this class is totally confusing!
+
+class op_par_loop_args
 {
   public:
     static const int num_params;
@@ -61,10 +63,15 @@ class op_par_loop
     // use indirection.
     vector<op_argument*> planContainer;  
 
+    void init(SgFunctionCallExp* fn);
+
+    // These violate ODR. Fix later.
+    int numParams() { return num_params; }
     int numArgs() { return args.size(); }
     int numIndArgs() { return ind_args.size(); }
 
     void updatePlanContainer(op_argument* arg);
+
 };
 
 // The ParLoop class inherits from AstSimpleProcessing, which provides a mechanism for 
@@ -81,8 +88,8 @@ class OPParLoop : public AstSimpleProcessing
     virtual void visit(SgNode *n);
     virtual void atTraversalEnd();
     
-    void generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl);
-    void generateStandard(SgFunctionCallExp *fn, op_par_loop *pl);
+    void generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl);
+    void generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl);
     void generateGlobalKernelsHeader();
     inline string getName(SgFunctionRefExp *fn);
     void setProject(SgProject *p);
@@ -90,10 +97,10 @@ class OPParLoop : public AstSimpleProcessing
 
 
     //void forwardDeclareUtilFunctions(SgGlobal* globalScope, SgType* op_set, SgType* op_dat, SgType* op_ptr, SgType* op_access, SgType* op_plan);
-    void preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body);
-    void postHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body);
-    void preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body);  
-    void postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body);
+    void preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop_args *pl, SgBasicBlock *body);
+    void postHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop_args *pl, SgBasicBlock *body);
+    void preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl, SgBasicBlock *body);  
+    void postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl, SgBasicBlock *body);
 
 
     map<string, SgFunctionDeclaration*> cudaFunctionDeclarations;

@@ -34,7 +34,9 @@
 #include "rose_op2parloop.h"
 
 
-const int op_par_loop::num_params = 2;
+const int op_par_loop_args::num_params = 2;
+
+
 
 /////////// Utility string functions for creating argument names ///////////////
 
@@ -55,12 +57,64 @@ inline string argLocal(int i)
   return arg(i)+"_l";
 }
 
-/////////// op_par_loop : Implementation ///////////////////////////////////////
+///////// Utility functions that may be moved to another file later
 
-/*
- *  Update container
- */
-void op_par_loop::updatePlanContainer(op_argument* argument)
+SgFunctionCallExp* isOpParLoop(SgNode *n)
+{
+  SgFunctionCallExp *fn = isSgFunctionCallExp(n);
+  if (fn)
+  {
+    string fn_name = fn->getAssociatedFunctionDeclaration()->get_name().getString();
+    if (  fn_name.compare("op_par_loop_2")==0
+       || fn_name.compare("op_par_loop_3")==0
+       || fn_name.compare("op_par_loop_4")==0 
+       || fn_name.compare("op_par_loop_5")==0
+       || fn_name.compare("op_par_loop_6")==0
+       || fn_name.compare("op_par_loop_7")==0
+       || fn_name.compare("op_par_loop_8")==0
+       || fn_name.compare("op_par_loop_9")==0
+      )
+    {
+      cerr << "Located Function " << fn_name << endl;
+      return fn;
+    }
+  }
+  
+  return NULL;
+}
+
+
+/////////// op_par_loop_args : Implementation //////////////////////////////////
+
+void op_par_loop_args::init(SgFunctionCallExp* fn)
+{
+  SgExpressionPtrList& fnCallArgs = fn->get_args()->get_expressions();
+      
+  // We parse the arguments to the op_par_loop_3 call into our internal 
+  // representation that is a little more convenient for later on.
+  SgExpressionPtrList::iterator i=fnCallArgs.begin();
+  kernel = isSgFunctionRefExp(*i);
+  ++i;
+  set = isSgVarRefExp(*i);
+  ++i;
+  
+  // Calculate number of args = total - 3 i.e. kernel, label and set and create arg objects
+  int numArgs = (fnCallArgs.size() - num_params) / op_argument::num_params;
+  for (int j=0; j<numArgs; ++j)
+  {
+    op_argument* parg = new op_argument(i);
+    parg->own_index = args.size();
+    updatePlanContainer(parg);
+    
+    args.push_back(parg);
+    if (parg->usesIndirection())
+    {
+      ind_args.push_back(parg);
+    }
+  }
+}
+
+void op_par_loop_args::updatePlanContainer(op_argument* argument)
 {
   if(argument->usesIndirection())
   {
@@ -92,55 +146,26 @@ void OPParLoop::setProject(SgProject *p)
  */
 void OPParLoop::visit(SgNode *n) 
 {
+  SgGlobal *globalScope;
+  SgFunctionCallExp *fn;
+  
   // We need to put the global scope on the scope stack so that we can look
   // up the oplus datatypes later on (in generateSpecial).
-  SgGlobal *globalScope = isSgGlobal(n);
-  if(globalScope!=NULL)
-    pushScopeStack(globalScope);
-
-  SgFunctionCallExp *fn = isSgFunctionCallExp(n);
-  if(fn != NULL)
+  if ((globalScope = isSgGlobal(n)))
   {
-    string fn_name = fn->getAssociatedFunctionDeclaration()->get_name().getString();
-    if(   fn_name.compare("op_par_loop_2")==0
-       || fn_name.compare("op_par_loop_3")==0
-       || fn_name.compare("op_par_loop_4")==0 
-       || fn_name.compare("op_par_loop_5")==0
-       || fn_name.compare("op_par_loop_6")==0
-       || fn_name.compare("op_par_loop_7")==0
-       || fn_name.compare("op_par_loop_8")==0
-       || fn_name.compare("op_par_loop_9")==0
-      )
-    {
-      cout << "Located Function " << fn_name << endl;
-      SgExpressionPtrList& args = fn->get_args()->get_expressions();
-      
-      // We parse the arguments to the op_par_loop_3 call into our internal 
-      // representation that is a little more convenient for later on.
-      SgExpressionPtrList::iterator i=args.begin();
-      op_par_loop *pl = new op_par_loop();
-      pl->kernel = isSgFunctionRefExp(*i++);
-      pl->set = isSgVarRefExp(*i++);
-      
-      // Calculate number of args = total - 3 i.e. kernel, label and set and create arg objects
-      int numArgs = (args.size() - op_par_loop::num_params) / op_argument::num_params;
-      for(int j=0; j<numArgs; j++)
-      {
-        op_argument* parg = new op_argument(i);
-        parg->own_index = pl->args.size();
-        pl->updatePlanContainer(parg);
-        
-        pl->args.push_back(parg);
-        if(parg->usesIndirection())
-          pl->ind_args.push_back(parg);
-      }
+    pushScopeStack(globalScope);
+  }
 
-      // Generate kernels
-      if(pl->numIndArgs() == 0)
-        generateSpecial(fn, pl);
-      else
-        generateStandard(fn, pl);
-    }
+  if ((fn = isOpParLoop(n)))
+  {
+    op_par_loop_args *parLoopArgs = new op_par_loop_args();
+    parLoopArgs->init(fn);
+    
+    // Generate kernels
+    if(parLoopArgs->numIndArgs() == 0)
+      generateSpecial(fn, parLoopArgs);
+    else
+      generateStandard(fn, parLoopArgs);
   }
 }
 
@@ -212,7 +237,7 @@ void OPParLoop::atTraversalEnd()
  *  Generate Seperate File For the Special Kernel
  *  ---------------------------------------------
  */ 
-void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
+void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
 {
   // We build a new file for the CUDA kernel and its stub function
   string kernel_name = getName(pl->kernel);
@@ -570,7 +595,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop *pl)
  *  Generate Seperate File For the Standard Kernel
  *  ----------------------------------------------
  */ 
-void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
+void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
 {
   // We build a new file for the CUDA kernel and its stub function
   string kernel_name = getName(pl->kernel);
@@ -1515,7 +1540,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop *pl)
 
 
 
-void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body)
+void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn,
+                                            op_par_loop_args *pl, SgBasicBlock *body)
 {
   for(int i=0; i<pl->numArgs(); i++)
   {
@@ -1549,7 +1575,8 @@ void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop *
   }
 }
 
-void OPParLoop::postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body)
+void OPParLoop::postKernelGlobalDataHandling(SgFunctionCallExp *fn,
+                                             op_par_loop_args *pl, SgBasicBlock *body)
 {
   for(int i=0; i<pl->numArgs(); i++)
   {
@@ -1598,7 +1625,8 @@ void OPParLoop::postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop 
 
 
 
-void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body)
+void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn,
+                                            op_par_loop_args *pl, SgBasicBlock *body)
 {
   // Handle Reduct
   ///////////////////////
@@ -1758,7 +1786,8 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *
   }
 }
 
-void OPParLoop::postHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop *pl, SgBasicBlock *body)
+void OPParLoop::postHandleConstAndGlobalData(SgFunctionCallExp *fn,
+                                             op_par_loop_args *pl, SgBasicBlock *body)
 {
   // Handle Reduct
   ///////////////////////

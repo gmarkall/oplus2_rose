@@ -55,7 +55,6 @@ class OPBuild : public AstSimpleProcessing
     vector<SgDeclarationStatement*> sharedConstVariables;
 
   public:
-    OPBuild();
     virtual void visit(SgNode *n);
     virtual void atTraversalEnd();
 

@@ -82,6 +82,7 @@ class OPParLoop : public AstSimpleProcessing
 {
   private:
     SgProject *project;
+    SgGlobal *fileGlobalScope;
     vector<SgProject*> kernels;
 
   public:
@@ -102,6 +103,7 @@ class OPParLoop : public AstSimpleProcessing
     void preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl, SgBasicBlock *body);  
     void postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl, SgBasicBlock *body);
 
+    void createKernelFile(string kernel_name);
 
     map<string, SgFunctionDeclaration*> cudaFunctionDeclarations;
 };

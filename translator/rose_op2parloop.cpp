@@ -180,11 +180,11 @@ void OPParLoop::unparse()
 {
   for(vector<SgProject*>::iterator i=kernels.begin(); i!=kernels.end(); ++i)
   {  
-    cout << "Running AST tests." << endl;
+    cerr << "Running AST tests." << endl;
     AstTests::runAllTests(*i);
-    cout << "AST tests passed." <<endl;
+    cerr << "AST tests passed." <<endl;
     (*i)->unparse();
-    cout << "Unparsed." << endl;
+    cerr << "Unparsed." << endl;
   }
 }
 
@@ -195,7 +195,7 @@ void OPParLoop::generateGlobalKernelsHeader()
 {
   // We build a new file for the CUDA kernel and its stub function
   string file_name = "kernels.h";
-  cout << "Generating CUDA Kernels File" << endl;
+  cerr << "Generating CUDA Kernels File" << endl;
   
   SgSourceFile *file = isSgSourceFile(buildFile("blank.cpp", file_name, NULL));
   ROSE_ASSERT(file!=NULL);
@@ -233,9 +233,32 @@ inline string OPParLoop::getName(SgFunctionRefExp *fn)
  */
 void OPParLoop::atTraversalEnd() 
 {
-  cout << "Traversal Ended." << endl;
+  cerr << "Traversal Ended." << endl;
 }
 
+
+void OPParLoop::createKernelFile(string kernel_name)
+{  
+  // We build a new file for the CUDA kernel and its stub function
+  string file_name = kernel_name + "_kernel.cu";
+  cerr << "Generating (Special) CUDA Parallel Loop File for " << kernel_name << endl;
+  
+  SgSourceFile *file = isSgSourceFile(buildFile("blank.cpp", file_name, NULL));
+  ROSE_ASSERT(file!=NULL);
+  fileGlobalScope = file->get_globalScope();
+  
+  addTextForUnparser(fileGlobalScope,"#include \"user_defined_types.h\"\n",AstUnparseAttribute::e_before);
+  addTextForUnparser(fileGlobalScope,"#include \"op_datatypes.h\"\n",AstUnparseAttribute::e_before);
+  addTextForUnparser(fileGlobalScope,"#include \"kernels.h\"\n\n",AstUnparseAttribute::e_before);
+  
+  // C kernel prefixed with the __device__ keyword. However, we could copy the AST
+  // subtree representing the kernel into the new file, which would remove the
+  // requirement for writing each kernel in a separate .h file.
+  addTextForUnparser(fileGlobalScope, "\n\n__device__\n#include <"+kernel_name+".h>\n",AstUnparseAttribute::e_before);
+
+  // Add to list of files that need to be unparsed.
+  kernels.push_back(file->get_project());
+}  
 
 /*
  *  Generate Seperate File For the Special Kernel
@@ -243,35 +266,19 @@ void OPParLoop::atTraversalEnd()
  */ 
 void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
 {
-  // We build a new file for the CUDA kernel and its stub function
   string kernel_name = getName(pl->kernel);
-  string file_name = kernel_name + "_kernel.cu";
-  cout << "Generating (Special) CUDA Parallel Loop File for " << kernel_name << endl;
-  
-  SgSourceFile *file = isSgSourceFile(buildFile("blank.cpp", file_name, NULL));
-  ROSE_ASSERT(file!=NULL);
-  SgGlobal *globalScope = file->get_globalScope();
-  
-  addTextForUnparser(globalScope,"#include \"user_defined_types.h\"\n",AstUnparseAttribute::e_before);
-  addTextForUnparser(globalScope,"#include \"op_datatypes.h\"\n",AstUnparseAttribute::e_before);
-  addTextForUnparser(globalScope,"#include \"kernels.h\"\n\n",AstUnparseAttribute::e_before);
-  
-    
+  createKernelFile(kernel_name);
+
   // In order to build the prototype for the plan function, we need to get hold of the types 
   // that we intend to pass it. Since these are declared in op_datatypes.h, we need to 
   // loop them up before we can use them.
   SgType *op_set, *op_dat, *op_ptr, *op_access, /* *op_datatype,*/ *op_plan;
   op_set = lookupNamedTypeInParentScopes("op_set");
-  op_dat = SgClassType::createType(buildStructDeclaration(SgName("op_dat<void>"), globalScope));
+  op_dat =
+  SgClassType::createType(buildStructDeclaration(SgName("op_dat<void>"), fileGlobalScope));
   op_ptr = lookupNamedTypeInParentScopes("op_ptr");
   op_access = lookupNamedTypeInParentScopes("op_access");
   op_plan = lookupNamedTypeInParentScopes("op_plan");
-
-  // C kernel prefixed with the __device__ keyword. However, we could copy the AST
-  // subtree representing the kernel into the new file, which would remove the
-  // requirement for writing each kernel in a separate .h file.
-  addTextForUnparser(globalScope, "\n\n__device__\n#include <"+kernel_name+".h>\n",AstUnparseAttribute::e_before);
-
   
   // 1 FUNCTION DEFINITION <START>
   // =======================================
@@ -302,9 +309,10 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   
   // We can build the __global__ function using the parameter list and add it to our new file. We get a reference to
   // the body of this function so that we can add code to it later on.
-  SgFunctionDeclaration *func = buildDefiningFunctionDeclaration("op_cuda_"+kernel_name, buildVoidType(), paramList, globalScope);
+  SgFunctionDeclaration *func =
+  buildDefiningFunctionDeclaration("op_cuda_"+kernel_name, buildVoidType(), paramList, fileGlobalScope);
   addTextForUnparser(func,"\n\n__global__",AstUnparseAttribute::e_before);
-  appendStatement(func, globalScope);
+  appendStatement(func, fileGlobalScope);
   SgBasicBlock *body = func->get_definition()->get_body();
 
   // We Add the declarations of local variables first.
@@ -401,9 +409,9 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
 
     // We can build the __global__ function using the parameter list and add it to our new file. We get a reference to
     // the body of this function so that we can add code to it later on.
-    func = buildDefiningFunctionDeclaration("op_cuda_"+kernel_name+"_reduction", buildVoidType(), paramList, globalScope);
+    func = buildDefiningFunctionDeclaration("op_cuda_"+kernel_name+"_reduction", buildVoidType(), paramList, fileGlobalScope);
     addTextForUnparser(func,"\n\n__global__",AstUnparseAttribute::e_before);
-    appendStatement(func, globalScope);
+    appendStatement(func, fileGlobalScope);
     body = func->get_definition()->get_body();
 
     for(int i=0; i<pl->numArgs(); i++)
@@ -477,9 +485,9 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // We build the function with the parameter list and insert it into the global
   // scope of our file as before.
   string kernelFuncName = "op_par_loop_" + kernel_name;
-  func = buildDefiningFunctionDeclaration(kernelFuncName, buildFloatType(), paramList, globalScope);
+  func = buildDefiningFunctionDeclaration(kernelFuncName, buildFloatType(), paramList, fileGlobalScope);
   cudaFunctionDeclarations.insert(pair<string, SgFunctionDeclaration*>(kernel_name, func));
-  appendStatement(func, globalScope);
+  appendStatement(func, fileGlobalScope);
   body = func->get_definition()->get_body();
 
   // Declare gridsize and bsize
@@ -590,8 +598,6 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   SgReturnStmt* rtstmt = buildReturnStmt(buildOpaqueVarRefExp(SgName("elapsed_time_ms")));
   appendStatement(rtstmt, body);
   
-  // Add to list of files that need to be unparsed.
-  kernels.push_back(file->get_project());
 }
 
 
@@ -601,29 +607,16 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
  */ 
 void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
 {
-  // We build a new file for the CUDA kernel and its stub function
   string kernel_name = getName(pl->kernel);
-  string file_name = kernel_name + "_kernel.cu";
-  cout << "Generating (Standard) CUDA Parallel Loop File for " << kernel_name << endl;
-  
-  SgSourceFile *file = isSgSourceFile(buildFile("blank.cpp", file_name, NULL));
-  ROSE_ASSERT(file!=NULL);
-  SgGlobal *globalScope = file->get_globalScope();
-  
-  // Start adding the include files
-  addTextForUnparser(globalScope,"#include \"user_defined_types.h\"\n",AstUnparseAttribute::e_before);
-  addTextForUnparser(globalScope,"#include \"op_datatypes.h\"\n",AstUnparseAttribute::e_before);
-  addTextForUnparser(globalScope,"#include \"kernels.h\"\n\n",AstUnparseAttribute::e_before);
-  
-  // At present we copy Mike's implementation in that we prefix the include to the
-  addTextForUnparser(globalScope, "\n\n__device__\n#include <"+kernel_name+".h>\n",AstUnparseAttribute::e_before);
+  createKernelFile(kernel_name);
   
   // In order to build the prototype for the plan function, we need to get hold of the types 
   // that we intend to pass it. Since these are declared in op_datatypes.h, we need to 
   // loop them up before we can use them.
   SgType *op_set, *op_dat, *op_ptr, *op_access,/* *op_datatype,*/ *op_plan;
   op_set = lookupNamedTypeInParentScopes("op_set");
-  op_dat = SgClassType::createType(buildStructDeclaration(SgName("op_dat<void>"), globalScope));
+  op_dat =
+  SgClassType::createType(buildStructDeclaration(SgName("op_dat<void>"), fileGlobalScope));
   op_ptr = lookupNamedTypeInParentScopes("op_ptr");
   op_access = lookupNamedTypeInParentScopes("op_access");
   op_plan = lookupNamedTypeInParentScopes("op_plan");
@@ -705,9 +698,9 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
 
   // We can build the __global__ function using the parameter list and add it to our new file. We get a reference to
   // the body of this function so that we can add code to it later on.
-  SgFunctionDeclaration *func = buildDefiningFunctionDeclaration("op_cuda_" + kernel_name, buildVoidType(), paramList, globalScope);
+  SgFunctionDeclaration *func = buildDefiningFunctionDeclaration("op_cuda_" + kernel_name, buildVoidType(), paramList, fileGlobalScope);
   addTextForUnparser(func,"\n\n__global__",AstUnparseAttribute::e_before);
-  appendStatement(func, globalScope);
+  appendStatement(func, fileGlobalScope);
   SgBasicBlock *body = func->get_definition()->get_body();
   
   // 2. ADD DECLARATION OF LOCAL VARIABLES
@@ -1305,9 +1298,9 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // We build the function with the parameter list and insert it into the global
   // scope of our file as before.
   string kernelFuncName = "op_par_loop_" + kernel_name;
-  func = buildDefiningFunctionDeclaration(kernelFuncName, buildFloatType(), paramList, globalScope);
+  func = buildDefiningFunctionDeclaration(kernelFuncName, buildFloatType(), paramList, fileGlobalScope);
   cudaFunctionDeclarations.insert(pair<string, SgFunctionDeclaration*>(kernel_name, func));
-  appendStatement(func, globalScope);
+  appendStatement(func, fileGlobalScope);
   body = func->get_definition()->get_body();
 
   // Add variables nargs and 'ninds'
@@ -1537,9 +1530,6 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // Add return statement
   SgReturnStmt* rtstmt = buildReturnStmt(buildOpaqueVarRefExp(SgName("total_time")));
   appendStatement(rtstmt, body);
-
-  // Add to list of files that need to be unparsed.
-  kernels.push_back(file->get_project());
 }
 
 

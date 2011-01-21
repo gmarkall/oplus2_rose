@@ -302,6 +302,13 @@ void OPParLoop::createReductionKernel(string kernel_name, SgFunctionParameterLis
   reductionBody = func->get_definition()->get_body();
 }
 
+void OPParLoop::createSharedVariable(string name, SgType *type, SgScopeStatement *scope)
+{
+  SgVariableDeclaration *varDec = buildVariableDeclaration(name, type, NULL, scope);
+  addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
+  appendStatement(varDec, scope);
+}
+
 /*
  *  Generate Seperate File For the Special Kernel
  *  ---------------------------------------------
@@ -732,25 +739,20 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // Add shared variables for the planContainer variables - for each category <ptr>
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
   {
-    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_ptr"), buildPointerType(buildIntType()), NULL, kernelBody);
-    addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-    appendStatement(varDec,kernelBody);
+    createSharedVariable("ind_"+arg(i)+"_ptr", buildPointerType(buildIntType()), kernelBody);
   }
 
   // Add shared variables for the planContainer variables - for each category <size>
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
   {
-    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_size"), buildIntType(), NULL, kernelBody);
-    addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-    appendStatement(varDec,kernelBody);
+    createSharedVariable("ind_"+arg(i)+"_size", buildIntType(), kernelBody);
   }
 
   // Add shared variables for the planContainer variables - for each category <s for shared>
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
   {
-    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_s"), buildPointerType(pl->planContainer[i]->type), NULL, kernelBody);
-    addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-    appendStatement(varDec,kernelBody);
+    SgType *t = buildPointerType(pl->planContainer[i]->type);
+    createSharedVariable("ind_"+arg(i)+"_s", t, kernelBody);
   }
 
   // Then add respective shared variables for each argument
@@ -758,43 +760,20 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   {
     if(pl->args[i]->usesIndirection())
     {
-      SgVariableDeclaration *varDec = buildVariableDeclaration(SgName(arg(i) + "_ptr"), buildPointerType(buildIntType()), NULL, kernelBody);
-      addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-      appendStatement(varDec,kernelBody);
+      createSharedVariable(arg(i)+"_ptr", buildPointerType(buildIntType()), kernelBody);
     }
     else if(!pl->args[i]->consideredAsConst())
     {
-      SgVariableDeclaration *varDec = buildVariableDeclaration(SgName(arg(i)), buildPointerType(pl->args[i]->type), NULL, kernelBody);
-      addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-      appendStatement(varDec,kernelBody);
+      SgType *t = buildPointerType(pl->args[i]->type);
+      createSharedVariable(arg(i), t, kernelBody);
     }
   }
 
-  // Add nelem
-  varDec = buildVariableDeclaration(SgName("nelem2"), buildIntType(), NULL, kernelBody);
-  addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,kernelBody);
-
-  // Add ncolor
-  varDec = buildVariableDeclaration(SgName("ncolor"), buildIntType(), NULL, kernelBody);
-  addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,kernelBody);
-
-  // Add color
-  varDec = buildVariableDeclaration(SgName("color"), buildPointerType(buildIntType()), NULL, kernelBody);
-  addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,kernelBody);
-
-  // blockId
-  varDec = buildVariableDeclaration(SgName("blockId"), buildIntType(), NULL, kernelBody);
-  addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,kernelBody);
-
-  // nelem
-  varDec = buildVariableDeclaration(SgName("nelem"), buildIntType(), NULL, kernelBody);
-  addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,kernelBody);
-
+  createSharedVariable("nelem2", buildIntType(), kernelBody);
+  createSharedVariable("ncolor", buildIntType(), kernelBody);
+  createSharedVariable("color", buildPointerType(buildIntType()), kernelBody);
+  createSharedVariable("blockId", buildIntType(), kernelBody);
+  createSharedVariable("nelem", buildIntType(), kernelBody);
 
   // 4.1 GET SIZES AND SHIFT POINTERS AND DIRECT MAPPED DATA
   // ========================================================

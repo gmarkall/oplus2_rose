@@ -223,7 +223,7 @@ void OPParLoop::generateGlobalKernelsHeader()
 /*
  * Returns the name of the function pointed to by a function pointer.
  */
-inline string OPParLoop::getName(SgFunctionRefExp *fn)
+string OPParLoop::getName(SgFunctionRefExp *fn)
 {
   return fn->get_symbol_i()->get_name().getString();
 }
@@ -308,6 +308,65 @@ void OPParLoop::createSharedVariable(string name, SgType *type, SgScopeStatement
   addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
   appendStatement(varDec, scope);
 }
+
+void OPParLoop::createBeginTimerBlock(SgScopeStatement *scope)
+{
+  // Add the timer block
+  //-----------------------------------------
+  /*
+  float elapsed_time_ms=0.0f;
+  cudaEvent_t start, stop;
+  cudaEventCreate( &start );
+  cudaEventCreate( &stop  );
+  cudaEventRecord( start, 0 );
+  */
+  //-----------------------------------------
+  SgVariableDeclaration *varDec;
+  SgExprStatement *fnCall;
+  varDec = buildVariableDeclaration(SgName("elapsed_time_ms"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), stubBody);
+  addTextForUnparser(varDec,"\ncudaEvent_t start, stop;", AstUnparseAttribute::e_after);
+  appendStatement(varDec,scope);
+  fnCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("start")))), stubBody);
+  appendStatement(fnCall,scope);
+  fnCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("stop")))), stubBody);
+  appendStatement(fnCall,scope);
+  fnCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("start")), buildIntVal(0)), stubBody);
+  appendStatement(fnCall,scope);
+}
+
+void OPParLoop::createEndTimerBlock(SgScopeStatement *scope, bool accumulateTime)
+{
+  // Add the timer block
+  //------------------------------------------------------
+  /*
+  cudaEventRecord( stop, 0 );
+  cudaThreadSynchronize();
+  cudaEventElapsedTime( &elapsed_time_ms, start, stop );
+  cudaEventDestroy( start );
+  cudaEventDestroy( stop );
+  total_time += elapsed_time_ms;
+  */  
+  //------------------------------------------------------
+  SgExprStatement *fnCall;
+  fnCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("stop")), buildIntVal(0)), stubBody);
+  appendStatement(fnCall,scope);
+  fnCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, stubBody);
+  appendStatement(fnCall, scope);
+  fnCall = buildFunctionCallStmt("cudaEventElapsedTime", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("&elapsed_time_ms")), buildOpaqueVarRefExp(SgName("start")),
+  buildOpaqueVarRefExp(SgName("stop")) ), stubBody);
+  appendStatement(fnCall, scope);
+  fnCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("start")) ), stubBody);
+  appendStatement(fnCall, scope);
+  fnCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("stop")) ), stubBody);
+  appendStatement(fnCall, scope);
+
+  if (accumulateTime)
+  {
+    SgPlusAssignOp *e = buildPlusAssignOp( buildOpaqueVarRefExp(SgName("total_time")), buildOpaqueVarRefExp(SgName("elapsed_time_ms")) );
+    appendStatement(buildExprStatement(e),scope);  
+  }
+}
+
 
 /*
  *  Generate Seperate File For the Special Kernel
@@ -527,25 +586,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
 
   preHandleConstAndGlobalData(fn, pl);
 
-  // Add the timer block <start>
-  //-----------------------------------------
-  /*
-  float elapsed_time_ms=0.0f;
-  cudaEvent_t start, stop;
-  cudaEventCreate( &start );
-  cudaEventCreate( &stop  );
-  cudaEventRecord( start, 0 );
-  */
-  //-----------------------------------------
-  varDec = buildVariableDeclaration(SgName("elapsed_time_ms"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), stubBody);
-  addTextForUnparser(varDec,"\ncudaEvent_t start, stop;", AstUnparseAttribute::e_after);
-  appendStatement(varDec,stubBody);
-  SgExprStatement *kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("start")))), stubBody);
-  appendStatement(kCall,stubBody);
-  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("stop")))), stubBody);
-  appendStatement(kCall,stubBody);
-  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("start")), buildIntVal(0)), stubBody);
-  appendStatement(kCall,stubBody);
+  createBeginTimerBlock(stubBody);
 
   // To add a call to the CUDA function, we need to build a list of parameters that
   // we pass to it. The easiest way to do this is to name the members of the 
@@ -571,7 +612,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // We have to add the kernel configuration as part of the function name
   // as CUDA is not directly supported by ROSE - however, I understand
   // that CUDA and OpenCL support is coming soon!
-  kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<gridsize,bsize,reduct_shared>>>", buildVoidType(), kPars, stubBody);
+  SgExprStatement *kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<gridsize,bsize,reduct_shared>>>", buildVoidType(), kPars, stubBody);
   appendStatement(kCall,stubBody);
 
   // If we have reduction operations it requires a second kernel launch (gridsize = 1, blocksize = 1)
@@ -594,28 +635,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
     appendStatement(kCall,stubBody);
   }
 
-
-  // Add the timer block <end>
-  //------------------------------------------------------
-  /*
-  cudaEventRecord( stop, 0 );
-  cudaThreadSynchronize();
-  cudaEventElapsedTime( &elapsed_time_ms, start, stop );
-  cudaEventDestroy( start );
-  cudaEventDestroy( stop );
-  */  
-  //------------------------------------------------------
-  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("stop")), buildIntVal(0)), stubBody);
-  appendStatement(kCall,stubBody);
-  kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, stubBody);
-  appendStatement(kCall, stubBody);
-  kCall = buildFunctionCallStmt("cudaEventElapsedTime", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("&elapsed_time_ms")), buildOpaqueVarRefExp(SgName("start")),
-  buildOpaqueVarRefExp(SgName("stop")) ), stubBody);
-  appendStatement(kCall, stubBody);
-  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("start")) ), stubBody);
-  appendStatement(kCall, stubBody);
-  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("stop")) ), stubBody);
-  appendStatement(kCall, stubBody);
+  createEndTimerBlock(stubBody, false);
 
   postHandleConstAndGlobalData(fn, pl);
 
@@ -1338,7 +1358,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   appendStatement(varDec,stubBody);
   
 
-  // by Zohirul : Create and initialize the Plan variable pointer
+  // Create and initialize the Plan variable pointer
   //Example: op_plan *Plan = plan(name,set,nargs,args,idxs,ptrs,dims,typs,accs,ninds,inds);
   // Create the plan function call, 1) first create params, 2) then call the function
   SgExprListExp *planPars = buildExprListExp();
@@ -1382,28 +1402,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   varDec = buildVariableDeclaration(SgName("nshared"), buildIntType(), buildAssignInitializer(e), blockLoopBody);
   appendStatement(varDec,blockLoopBody);
 
-
-  // Add the timer block
-  //-----------------------------------------
-  /*
-  float elapsed_time_ms=0.0f;
-  cudaEvent_t start, stop;
-  cudaEventCreate( &start );
-  cudaEventCreate( &stop  );
-  cudaEventRecord( start, 0 );
-  */
-  //-----------------------------------------
-  varDec = buildVariableDeclaration(SgName("elapsed_time_ms"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), stubBody);
-  addTextForUnparser(varDec,"\ncudaEvent_t start, stop;", AstUnparseAttribute::e_after);
-  appendStatement(varDec,blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("start")))), stubBody);
-  appendStatement(kCall,blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("stop")))), stubBody);
-  appendStatement(kCall,blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("start")), buildIntVal(0)), stubBody);
-  appendStatement(kCall,blockLoopBody);
-
-
+  createBeginTimerBlock(blockLoopBody);
+  
   // To add a call to the CUDA function, we need to build a list of parameters that
   // we pass to it. The easiest way to do this is to name the members of the 
   // struct to which they belong, but this is not the most elegant approach.
@@ -1460,32 +1460,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<nblocks,BSIZE,nshared>>>", buildVoidType(), kPars, stubBody);
   appendStatement(kCall,blockLoopBody);
 
-
-  // Add the timer block
-  //------------------------------------------------------
-  /*
-  cudaEventRecord( stop, 0 );
-  cudaThreadSynchronize();
-  cudaEventElapsedTime( &elapsed_time_ms, start, stop );
-  cudaEventDestroy( start );
-  cudaEventDestroy( stop );
-  total_time += elapsed_time_ms;
-  */  
-  //------------------------------------------------------
-  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("stop")), buildIntVal(0)), stubBody);
-  appendStatement(kCall,blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, stubBody);
-  appendStatement(kCall, blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventElapsedTime", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("&elapsed_time_ms")), buildOpaqueVarRefExp(SgName("start")),
-  buildOpaqueVarRefExp(SgName("stop")) ), stubBody);
-  appendStatement(kCall, blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("start")) ), stubBody);
-  appendStatement(kCall, blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("stop")) ), stubBody);
-  appendStatement(kCall, blockLoopBody);
-  e = buildPlusAssignOp( buildOpaqueVarRefExp(SgName("total_time")), buildOpaqueVarRefExp(SgName("elapsed_time_ms")) );
-  appendStatement(buildExprStatement(e),blockLoopBody);  
-
+  createEndTimerBlock(blockLoopBody, true);
 
   // Call cuda thread synchronize
   kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, stubBody);

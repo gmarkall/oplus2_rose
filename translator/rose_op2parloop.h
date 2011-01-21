@@ -113,6 +113,8 @@ class OPParLoop : public AstSimpleProcessing
     void createStub(string kernel_name, SgFunctionParameterList *paramList);
     void createReductionKernel(string kernel_name, SgFunctionParameterList *paramList);
     void createSharedVariable(string name, SgType *type, SgScopeStatement *scope);
+    void createBeginTimerBlock(SgScopeStatement *scope);
+    void createEndTimerBlock(SgScopeStatement *scope, bool accumulateTime);
 };
 
 #endif

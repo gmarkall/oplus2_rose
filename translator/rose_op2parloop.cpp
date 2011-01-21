@@ -260,6 +260,18 @@ void OPParLoop::createKernelFile(string kernel_name)
   kernels.push_back(file->get_project());
 }  
 
+void OPParLoop::initialiseDataTypes()
+{  
+  // In order to build the prototype for the plan function, we need to get hold of the types 
+  // that we intend to pass it. Since these are declared in op_datatypes.h, we need to 
+  // loop them up before we can use them.
+  op_set = lookupNamedTypeInParentScopes("op_set");
+  op_dat = SgClassType::createType(buildStructDeclaration(SgName("op_dat<void>"), fileGlobalScope));
+  op_ptr = lookupNamedTypeInParentScopes("op_ptr");
+  op_access = lookupNamedTypeInParentScopes("op_access");
+  op_plan = lookupNamedTypeInParentScopes("op_plan");
+}
+
 /*
  *  Generate Seperate File For the Special Kernel
  *  ---------------------------------------------
@@ -269,17 +281,8 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   string kernel_name = getName(pl->kernel);
   createKernelFile(kernel_name);
 
-  // In order to build the prototype for the plan function, we need to get hold of the types 
-  // that we intend to pass it. Since these are declared in op_datatypes.h, we need to 
-  // loop them up before we can use them.
-  SgType *op_set, *op_dat, *op_ptr, *op_access, /* *op_datatype,*/ *op_plan;
-  op_set = lookupNamedTypeInParentScopes("op_set");
-  op_dat =
-  SgClassType::createType(buildStructDeclaration(SgName("op_dat<void>"), fileGlobalScope));
-  op_ptr = lookupNamedTypeInParentScopes("op_ptr");
-  op_access = lookupNamedTypeInParentScopes("op_access");
-  op_plan = lookupNamedTypeInParentScopes("op_plan");
-  
+  initialiseDataTypes();
+ 
   // 1 FUNCTION DEFINITION <START>
   // =======================================
 
@@ -610,17 +613,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   string kernel_name = getName(pl->kernel);
   createKernelFile(kernel_name);
   
-  // In order to build the prototype for the plan function, we need to get hold of the types 
-  // that we intend to pass it. Since these are declared in op_datatypes.h, we need to 
-  // loop them up before we can use them.
-  SgType *op_set, *op_dat, *op_ptr, *op_access,/* *op_datatype,*/ *op_plan;
-  op_set = lookupNamedTypeInParentScopes("op_set");
-  op_dat =
-  SgClassType::createType(buildStructDeclaration(SgName("op_dat<void>"), fileGlobalScope));
-  op_ptr = lookupNamedTypeInParentScopes("op_ptr");
-  op_access = lookupNamedTypeInParentScopes("op_access");
-  op_plan = lookupNamedTypeInParentScopes("op_plan");
-
+  initialiseDataTypes();
+  
   // 1.1 FUNCTION DEFINITION - CREATE PARAMS
   // ===============================================
   

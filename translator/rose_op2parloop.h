@@ -85,6 +85,9 @@ class OPParLoop : public AstSimpleProcessing
     SgGlobal *fileGlobalScope;
     vector<SgProject*> kernels;
 
+    // Types in the generated code
+    SgType *op_set, *op_dat, *op_ptr, *op_access, *op_plan;
+
   public:
     virtual void visit(SgNode *n);
     virtual void atTraversalEnd();
@@ -104,6 +107,7 @@ class OPParLoop : public AstSimpleProcessing
     void postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl, SgBasicBlock *body);
 
     void createKernelFile(string kernel_name);
+    void initialiseDataTypes();
 
     map<string, SgFunctionDeclaration*> cudaFunctionDeclarations;
 };

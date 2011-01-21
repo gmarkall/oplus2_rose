@@ -293,6 +293,15 @@ void OPParLoop::createStub(string kernel_name, SgFunctionParameterList *paramLis
   stubBody = stubFunc->get_definition()->get_body();
 }
 
+void OPParLoop::createReductionKernel(string kernel_name, SgFunctionParameterList *paramList)
+{
+  // This will be better refactored with createKernel, but that's less pressing now.
+  SgFunctionDeclaration *func = buildDefiningFunctionDeclaration("op_cuda_"+kernel_name+"_reduction", buildVoidType(), paramList, fileGlobalScope);
+  addTextForUnparser(func,"\n\n__global__",AstUnparseAttribute::e_before);
+  appendStatement(func, fileGlobalScope);
+  reductionBody = func->get_definition()->get_body();
+}
+
 /*
  *  Generate Seperate File For the Special Kernel
  *  ---------------------------------------------
@@ -425,8 +434,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
       }
     }
 
-    string red_kernel_name = kernel_name+"_reduction";
-    createKernel(red_kernel_name, paramList);
+    createReductionKernel(kernel_name, paramList);
 
     for(int i=0; i<pl->numArgs(); i++)
     {
@@ -467,7 +475,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
         SgExprStatement *viTest = buildExprStatement(buildLessThanOp(buildOpaqueVarRefExp(indVar), buildIntVal(pl->args[i]->dim)));
         SgPlusPlusOp *viIncrement = buildPlusPlusOp(buildOpaqueVarRefExp(indVar));
         SgStatement *viForLoop = buildForStatement(viInit, viTest, viIncrement, viLoopBody);
-        appendStatement(viForLoop,kernelBody);
+        appendStatement(viForLoop,reductionBody);
       }
     }
   }

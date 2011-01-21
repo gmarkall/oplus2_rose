@@ -86,7 +86,7 @@ class OPParLoop : public AstSimpleProcessing
     vector<SgProject*> kernels;
 
     SgType *op_set, *op_dat, *op_ptr, *op_access, *op_plan;
-    SgBasicBlock *kernelBody, *stubBody;
+    SgBasicBlock *kernelBody, *stubBody, *reductionBody;
 
   public:
     virtual void visit(SgNode *n);
@@ -108,6 +108,7 @@ class OPParLoop : public AstSimpleProcessing
     void initialiseDataTypes();
     void createKernel(string kernel_name, SgFunctionParameterList *paramList);
     void createStub(string kernel_name, SgFunctionParameterList *paramList);
+    void createReductionKernel(string kernel_name, SgFunctionParameterList *paramList);
 
     map<string, SgFunctionDeclaration*> cudaFunctionDeclarations;
 };

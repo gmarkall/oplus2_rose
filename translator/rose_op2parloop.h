@@ -80,6 +80,16 @@ class op_par_loop_args
 
 class OPParLoop : public AstSimpleProcessing 
 {
+  public:
+    map<string, SgFunctionDeclaration*> cudaFunctionDeclarations;
+    
+    virtual void visit(SgNode *n);
+    virtual void atTraversalEnd();
+    
+    void setProject(SgProject *p);
+    void unparse();
+    void generateGlobalKernelsHeader();
+ 
   private:
     SgProject *project;
     SgGlobal *fileGlobalScope;
@@ -87,17 +97,10 @@ class OPParLoop : public AstSimpleProcessing
 
     SgType *op_set, *op_dat, *op_ptr, *op_access, *op_plan;
     SgBasicBlock *kernelBody, *stubBody, *reductionBody;
-
-  public:
-    virtual void visit(SgNode *n);
-    virtual void atTraversalEnd();
     
     void generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl);
     void generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl);
-    void generateGlobalKernelsHeader();
-    inline string getName(SgFunctionRefExp *fn);
-    void setProject(SgProject *p);
-    void unparse();
+    string getName(SgFunctionRefExp *fn);
 
     void preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop_args *pl);
     void postHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop_args *pl);
@@ -109,8 +112,6 @@ class OPParLoop : public AstSimpleProcessing
     void createKernel(string kernel_name, SgFunctionParameterList *paramList);
     void createStub(string kernel_name, SgFunctionParameterList *paramList);
     void createReductionKernel(string kernel_name, SgFunctionParameterList *paramList);
-
-    map<string, SgFunctionDeclaration*> cudaFunctionDeclarations;
 };
 
 #endif

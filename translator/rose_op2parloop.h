@@ -85,8 +85,8 @@ class OPParLoop : public AstSimpleProcessing
     SgGlobal *fileGlobalScope;
     vector<SgProject*> kernels;
 
-    // Types in the generated code
     SgType *op_set, *op_dat, *op_ptr, *op_access, *op_plan;
+    SgBasicBlock *kernelBody, *stubBody;
 
   public:
     virtual void visit(SgNode *n);
@@ -99,15 +99,15 @@ class OPParLoop : public AstSimpleProcessing
     void setProject(SgProject *p);
     void unparse();
 
-
-    //void forwardDeclareUtilFunctions(SgGlobal* globalScope, SgType* op_set, SgType* op_dat, SgType* op_ptr, SgType* op_access, SgType* op_plan);
-    void preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop_args *pl, SgBasicBlock *body);
-    void postHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop_args *pl, SgBasicBlock *body);
-    void preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl, SgBasicBlock *body);  
-    void postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl, SgBasicBlock *body);
+    void preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop_args *pl);
+    void postHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop_args *pl);
+    void preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl);  
+    void postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl);
 
     void createKernelFile(string kernel_name);
     void initialiseDataTypes();
+    void createKernel(string kernel_name, SgFunctionParameterList *paramList);
+    void createStub(string kernel_name, SgFunctionParameterList *paramList);
 
     map<string, SgFunctionDeclaration*> cudaFunctionDeclarations;
 };

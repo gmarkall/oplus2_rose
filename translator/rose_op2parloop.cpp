@@ -272,6 +272,27 @@ void OPParLoop::initialiseDataTypes()
   op_plan = lookupNamedTypeInParentScopes("op_plan");
 }
 
+void OPParLoop::createKernel(string kernel_name, SgFunctionParameterList *paramList)
+{
+  // We can build the __global__ function using the parameter list and add it to our new file. We get a reference to
+  // the body of this function so that we can add code to it later on.
+  SgFunctionDeclaration *func = buildDefiningFunctionDeclaration("op_cuda_"+kernel_name, buildVoidType(), paramList, fileGlobalScope);
+  addTextForUnparser(func,"\n\n__global__",AstUnparseAttribute::e_before);
+  appendStatement(func, fileGlobalScope);
+  kernelBody = func->get_definition()->get_body();
+}
+
+void OPParLoop::createStub(string kernel_name, SgFunctionParameterList *paramList)
+{
+  // We build the function with the parameter list and insert it into the global
+  // scope of our file as before.
+  string stubName = "op_par_loop_" + kernel_name;
+  SgFunctionDeclaration *stubFunc = buildDefiningFunctionDeclaration(stubName, buildFloatType(), paramList, fileGlobalScope);
+  cudaFunctionDeclarations.insert(pair<string, SgFunctionDeclaration*>(kernel_name, stubFunc));
+  appendStatement(stubFunc, fileGlobalScope);
+  stubBody = stubFunc->get_definition()->get_body();
+}
+
 /*
  *  Generate Seperate File For the Special Kernel
  *  ---------------------------------------------
@@ -309,14 +330,8 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
       appendArg(paramList, block_reduct);
     }
   }
-  
-  // We can build the __global__ function using the parameter list and add it to our new file. We get a reference to
-  // the body of this function so that we can add code to it later on.
-  SgFunctionDeclaration *func =
-  buildDefiningFunctionDeclaration("op_cuda_"+kernel_name, buildVoidType(), paramList, fileGlobalScope);
-  addTextForUnparser(func,"\n\n__global__",AstUnparseAttribute::e_before);
-  appendStatement(func, fileGlobalScope);
-  SgBasicBlock *body = func->get_definition()->get_body();
+ 
+  createKernel(kernel_name, paramList);
 
   // We Add the declarations of local variables first.
   for(int i=0; i<pl->numArgs(); i++)
@@ -324,15 +339,15 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
     if(pl->args[i]->isGlobal())
     {
       SgVariableDeclaration *varDec;
-      varDec = buildVariableDeclaration(argLocal(i), buildArrayType(pl->args[i]->type, buildIntVal(pl->args[i]->dim)), NULL, body);
-      appendStatement(varDec,body);
+      varDec = buildVariableDeclaration(argLocal(i), buildArrayType(pl->args[i]->type, buildIntVal(pl->args[i]->dim)), NULL, kernelBody);
+      appendStatement(varDec,kernelBody);
     }
   }
 
   
   // 2 HANDLE GLOBAL DATA <TRANSFER TO DEVICE>
   // =======================================
-  preKernelGlobalDataHandling(fn, pl, body);
+  preKernelGlobalDataHandling(fn, pl);
 
 
   // 3 MAIN EXECUTION LOOP <BEGIN>
@@ -364,7 +379,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
     }
     else
     {
-      SgExpression *e = buildOpaqueVarRefExp(argLocal(i), body);
+      SgExpression *e = buildOpaqueVarRefExp(argLocal(i), kernelBody);
       kPars->append_expression(e);
     }
   }
@@ -377,12 +392,12 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // an increment and a test statement. The we insert this loop into the __gloabl__ function.
   // Because threadIdx.x etc are not really variables, we invent "opaque" variables with these
   // names.
-  appendStatement(forLoop,body);
+  appendStatement(forLoop,kernelBody);
   
 
   // 4 HANDLE GLOBAL DATA <TRANSFER FROM DEVICE>
   // =======================================
-  postKernelGlobalDataHandling(fn, pl, body);
+  postKernelGlobalDataHandling(fn, pl);
 
 
   // 1 FUNCTION DEFINITION <END>
@@ -410,12 +425,8 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
       }
     }
 
-    // We can build the __global__ function using the parameter list and add it to our new file. We get a reference to
-    // the body of this function so that we can add code to it later on.
-    func = buildDefiningFunctionDeclaration("op_cuda_"+kernel_name+"_reduction", buildVoidType(), paramList, fileGlobalScope);
-    addTextForUnparser(func,"\n\n__global__",AstUnparseAttribute::e_before);
-    appendStatement(func, fileGlobalScope);
-    body = func->get_definition()->get_body();
+    string red_kernel_name = kernel_name+"_reduction";
+    createKernel(red_kernel_name, paramList);
 
     for(int i=0; i<pl->numArgs(); i++)
     {
@@ -456,7 +467,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
         SgExprStatement *viTest = buildExprStatement(buildLessThanOp(buildOpaqueVarRefExp(indVar), buildIntVal(pl->args[i]->dim)));
         SgPlusPlusOp *viIncrement = buildPlusPlusOp(buildOpaqueVarRefExp(indVar));
         SgStatement *viForLoop = buildForStatement(viInit, viTest, viIncrement, viLoopBody);
-        appendStatement(viForLoop,body);
+        appendStatement(viForLoop,kernelBody);
       }
     }
   }
@@ -485,27 +496,21 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
     appendArg(paramList, name);
   }
 
-  // We build the function with the parameter list and insert it into the global
-  // scope of our file as before.
-  string kernelFuncName = "op_par_loop_" + kernel_name;
-  func = buildDefiningFunctionDeclaration(kernelFuncName, buildFloatType(), paramList, fileGlobalScope);
-  cudaFunctionDeclarations.insert(pair<string, SgFunctionDeclaration*>(kernel_name, func));
-  appendStatement(func, fileGlobalScope);
-  body = func->get_definition()->get_body();
+  createStub(kernel_name, paramList);
 
   // Declare gridsize and bsize
   SgExpression *e = buildOpaqueVarRefExp(SgName("BSIZE"));
   SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("bsize"), buildIntType(), buildAssignInitializer(e));
-  appendStatement(varDec, body);
+  appendStatement(varDec, stubBody);
   
   e = buildOpaqueVarRefExp(SgName("set.size"));
   e = buildSubtractOp(e, buildIntVal(1));
   e = buildDivideOp(e, buildOpaqueVarRefExp(SgName("bsize")));
   e = buildAddOp(e, buildIntVal(1));
   varDec = buildVariableDeclaration(SgName("gridsize"), buildIntType(), buildAssignInitializer(e));
-  appendStatement(varDec, body);
+  appendStatement(varDec, stubBody);
 
-  preHandleConstAndGlobalData(fn, pl, body);
+  preHandleConstAndGlobalData(fn, pl);
 
   // Add the timer block <start>
   //-----------------------------------------
@@ -517,15 +522,15 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   cudaEventRecord( start, 0 );
   */
   //-----------------------------------------
-  varDec = buildVariableDeclaration(SgName("elapsed_time_ms"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), body);
+  varDec = buildVariableDeclaration(SgName("elapsed_time_ms"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), stubBody);
   addTextForUnparser(varDec,"\ncudaEvent_t start, stop;", AstUnparseAttribute::e_after);
-  appendStatement(varDec,body);
-  SgExprStatement *kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("start")))), body);
-  appendStatement(kCall,body);
-  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("stop")))), body);
-  appendStatement(kCall,body);
-  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("start")), buildIntVal(0)), body);
-  appendStatement(kCall,body);
+  appendStatement(varDec,stubBody);
+  SgExprStatement *kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("start")))), stubBody);
+  appendStatement(kCall,stubBody);
+  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("stop")))), stubBody);
+  appendStatement(kCall,stubBody);
+  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("start")), buildIntVal(0)), stubBody);
+  appendStatement(kCall,stubBody);
 
   // To add a call to the CUDA function, we need to build a list of parameters that
   // we pass to it. The easiest way to do this is to name the members of the 
@@ -551,8 +556,8 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // We have to add the kernel configuration as part of the function name
   // as CUDA is not directly supported by ROSE - however, I understand
   // that CUDA and OpenCL support is coming soon!
-  kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<gridsize,bsize,reduct_shared>>>", buildVoidType(), kPars, body);
-  appendStatement(kCall,body);
+  kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<gridsize,bsize,reduct_shared>>>", buildVoidType(), kPars, stubBody);
+  appendStatement(kCall,stubBody);
 
   // If we have reduction operations it requires a second kernel launch (gridsize = 1, blocksize = 1)
   if(reduction_required)
@@ -570,8 +575,8 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
         kPars->append_expression(buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
       }
     }
-    kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"_reduction<<<1,1,reduct_shared>>>", buildVoidType(), kPars, body);
-    appendStatement(kCall,body);
+    kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"_reduction<<<1,1,reduct_shared>>>", buildVoidType(), kPars, stubBody);
+    appendStatement(kCall,stubBody);
   }
 
 
@@ -585,21 +590,22 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   cudaEventDestroy( stop );
   */  
   //------------------------------------------------------
-  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("stop")), buildIntVal(0)), body);
-  appendStatement(kCall,body);
-  kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, body);
-  appendStatement(kCall, body);
-  kCall = buildFunctionCallStmt("cudaEventElapsedTime", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("&elapsed_time_ms")), buildOpaqueVarRefExp(SgName("start")), buildOpaqueVarRefExp(SgName("stop")) ), body);
-  appendStatement(kCall, body);
-  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("start")) ), body);
-  appendStatement(kCall, body);
-  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("stop")) ), body);
-  appendStatement(kCall, body);
+  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("stop")), buildIntVal(0)), stubBody);
+  appendStatement(kCall,stubBody);
+  kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, stubBody);
+  appendStatement(kCall, stubBody);
+  kCall = buildFunctionCallStmt("cudaEventElapsedTime", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("&elapsed_time_ms")), buildOpaqueVarRefExp(SgName("start")),
+  buildOpaqueVarRefExp(SgName("stop")) ), stubBody);
+  appendStatement(kCall, stubBody);
+  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("start")) ), stubBody);
+  appendStatement(kCall, stubBody);
+  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("stop")) ), stubBody);
+  appendStatement(kCall, stubBody);
 
-  postHandleConstAndGlobalData(fn, pl, body);
+  postHandleConstAndGlobalData(fn, pl);
 
   SgReturnStmt* rtstmt = buildReturnStmt(buildOpaqueVarRefExp(SgName("elapsed_time_ms")));
-  appendStatement(rtstmt, body);
+  appendStatement(rtstmt, stubBody);
   
 }
 
@@ -690,13 +696,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // 1.2 ADD FUNCTION DEFINITION
   // ===============================================
 
-  // We can build the __global__ function using the parameter list and add it to our new file. We get a reference to
-  // the body of this function so that we can add code to it later on.
-  SgFunctionDeclaration *func = buildDefiningFunctionDeclaration("op_cuda_" + kernel_name, buildVoidType(), paramList, fileGlobalScope);
-  addTextForUnparser(func,"\n\n__global__",AstUnparseAttribute::e_before);
-  appendStatement(func, fileGlobalScope);
-  SgBasicBlock *body = func->get_definition()->get_body();
-  
+  createKernel(kernel_name, paramList);
+
   // 2. ADD DECLARATION OF LOCAL VARIABLES
   // ===============================================
 
@@ -706,8 +707,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
     if((pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC) || (pl->args[i]->isNotGlobal() && !pl->args[i]->usesIndirection()))
     {
       SgType *argType = pl->args[i]->type;
-      SgVariableDeclaration *varDec = buildVariableDeclaration(argLocal(i), buildArrayType(argType, buildIntVal(pl->args[i]->dim)), NULL, body);
-      appendStatement(varDec,body);
+      SgVariableDeclaration *varDec = buildVariableDeclaration(argLocal(i), buildArrayType(argType, buildIntVal(pl->args[i]->dim)), NULL, kernelBody);
+      appendStatement(varDec,kernelBody);
     }
   }
 
@@ -716,32 +717,32 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // ===============================================
 
   // Add shared memory declaration
-  SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("shared"), buildArrayType(buildCharType(), NULL), NULL, body);
+  SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("shared"), buildArrayType(buildCharType(), NULL), NULL, kernelBody);
   addTextForUnparser(varDec,"\n\n  extern __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,body);
+  appendStatement(varDec,kernelBody);
 
   // Add shared variables for the planContainer variables - for each category <ptr>
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
   {
-    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_ptr"), buildPointerType(buildIntType()), NULL, body);
+    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_ptr"), buildPointerType(buildIntType()), NULL, kernelBody);
     addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-    appendStatement(varDec,body);
+    appendStatement(varDec,kernelBody);
   }
 
   // Add shared variables for the planContainer variables - for each category <size>
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
   {
-    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_size"), buildIntType(), NULL, body);
+    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_size"), buildIntType(), NULL, kernelBody);
     addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-    appendStatement(varDec,body);
+    appendStatement(varDec,kernelBody);
   }
 
   // Add shared variables for the planContainer variables - for each category <s for shared>
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
   {
-    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_s"), buildPointerType(pl->planContainer[i]->type), NULL, body);
+    SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("ind_" + arg(i) + "_s"), buildPointerType(pl->planContainer[i]->type), NULL, kernelBody);
     addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-    appendStatement(varDec,body);
+    appendStatement(varDec,kernelBody);
   }
 
   // Then add respective shared variables for each argument
@@ -749,42 +750,42 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   {
     if(pl->args[i]->usesIndirection())
     {
-      SgVariableDeclaration *varDec = buildVariableDeclaration(SgName(arg(i) + "_ptr"), buildPointerType(buildIntType()), NULL, body);
+      SgVariableDeclaration *varDec = buildVariableDeclaration(SgName(arg(i) + "_ptr"), buildPointerType(buildIntType()), NULL, kernelBody);
       addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-      appendStatement(varDec,body);
+      appendStatement(varDec,kernelBody);
     }
     else if(!pl->args[i]->consideredAsConst())
     {
-      SgVariableDeclaration *varDec = buildVariableDeclaration(SgName(arg(i)), buildPointerType(pl->args[i]->type), NULL, body);
+      SgVariableDeclaration *varDec = buildVariableDeclaration(SgName(arg(i)), buildPointerType(pl->args[i]->type), NULL, kernelBody);
       addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-      appendStatement(varDec,body);
+      appendStatement(varDec,kernelBody);
     }
   }
 
   // Add nelem
-  varDec = buildVariableDeclaration(SgName("nelem2"), buildIntType(), NULL, body);
+  varDec = buildVariableDeclaration(SgName("nelem2"), buildIntType(), NULL, kernelBody);
   addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,body);
+  appendStatement(varDec,kernelBody);
 
   // Add ncolor
-  varDec = buildVariableDeclaration(SgName("ncolor"), buildIntType(), NULL, body);
+  varDec = buildVariableDeclaration(SgName("ncolor"), buildIntType(), NULL, kernelBody);
   addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,body);
+  appendStatement(varDec,kernelBody);
 
   // Add color
-  varDec = buildVariableDeclaration(SgName("color"), buildPointerType(buildIntType()), NULL, body);
+  varDec = buildVariableDeclaration(SgName("color"), buildPointerType(buildIntType()), NULL, kernelBody);
   addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,body);
+  appendStatement(varDec,kernelBody);
 
   // blockId
-  varDec = buildVariableDeclaration(SgName("blockId"), buildIntType(), NULL, body);
+  varDec = buildVariableDeclaration(SgName("blockId"), buildIntType(), NULL, kernelBody);
   addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,body);
+  appendStatement(varDec,kernelBody);
 
   // nelem
-  varDec = buildVariableDeclaration(SgName("nelem"), buildIntType(), NULL, body);
+  varDec = buildVariableDeclaration(SgName("nelem"), buildIntType(), NULL, kernelBody);
   addTextForUnparser(varDec,"\n\n  __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,body);
+  appendStatement(varDec,kernelBody);
 
 
   // 4.1 GET SIZES AND SHIFT POINTERS AND DIRECT MAPPED DATA
@@ -891,12 +892,12 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
     expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_s")), expression);
     appendStatement(buildExprStatement(expression), ifBody);
   }
-  appendStatement(threadCondition, body);
+  appendStatement(threadCondition, kernelBody);
 
   // 4.2 CALL SYNCTHREADS
   // ========================================================
-  SgExprStatement *kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, body);
-  appendStatement(kCall, body);
+  SgExprStatement *kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, kernelBody);
+  appendStatement(kCall, kernelBody);
 
   // 4.3 COPY INDIRECT DATA SETS INTO SHARED MEMORY
   // ========================================================
@@ -971,17 +972,17 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
       appendStatement(buildExprStatement(expression), loopBody);
     }
     // Append outer loop
-    appendStatement(loopForLoop, body);
+    appendStatement(loopForLoop, kernelBody);
   }
 
   // 4.4 CALL SYNCTHREADS
   // ========================================================
-  kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, body);
-  appendStatement(kCall, body);
+  kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, kernelBody);
+  appendStatement(kCall, kernelBody);
     
   // 5. PRE-KERNEL HEADER
   // ========================================================
-  preKernelGlobalDataHandling(fn, pl, body);
+  preKernelGlobalDataHandling(fn, pl);
 
   // 6. CREATE OUTER MAIN LOOP BODY
   // ========================================================
@@ -1187,7 +1188,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
     // Append condition statement to outer loop body
     appendStatement(cond, loopBody);
     // Create syncfunction statement
-    kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, body);
+    kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, kernelBody);
     // Append syncthreads
     appendStatement(kCall, loopBody);
     // Append outer loop to the main body
@@ -1198,7 +1199,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   SgExprStatement *mainLoopTest = buildExprStatement( buildLessThanOp( buildVarRefExp(mainLoopVar), buildOpaqueVarRefExp(SgName("nelem2")) ) );  
   SgPlusAssignOp *mainLoopIncrement = buildPlusAssignOp(buildVarRefExp(mainLoopVar), buildOpaqueVarRefExp(SgName("blockDim.x")) );
   SgStatement *mainForLoop = buildForStatement(mainLoopInit, mainLoopTest, mainLoopIncrement, mainLoopBody);
-  appendStatement(mainForLoop, body);
+  appendStatement(mainForLoop, kernelBody);
   
   
 
@@ -1260,11 +1261,11 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
         appendStatement(buildExprStatement(expression), loopBody);
       }
       // Append outer loop to the main body
-      appendStatement(loopForLoop, body);
+      appendStatement(loopForLoop, kernelBody);
   }
 
   // Handle post global data handling
-  postKernelGlobalDataHandling(fn, pl, body);
+  postKernelGlobalDataHandling(fn, pl);
 
   // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
   
@@ -1289,21 +1290,15 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
     appendArg(paramList, name);
   }
 
-  // We build the function with the parameter list and insert it into the global
-  // scope of our file as before.
-  string kernelFuncName = "op_par_loop_" + kernel_name;
-  func = buildDefiningFunctionDeclaration(kernelFuncName, buildFloatType(), paramList, fileGlobalScope);
-  cudaFunctionDeclarations.insert(pair<string, SgFunctionDeclaration*>(kernel_name, func));
-  appendStatement(func, fileGlobalScope);
-  body = func->get_definition()->get_body();
+  createStub(kernel_name, paramList);
 
   // Add variables nargs and 'ninds'
   //Example : int nargs = 3, ninds = 2;
   
-  varDec = buildVariableDeclaration(SgName("nargs"), buildIntType(), buildAssignInitializer(buildIntVal(pl->numArgs())), body);
-  appendStatement(varDec,body);
-  varDec = buildVariableDeclaration(SgName("ninds"), buildIntType(), buildAssignInitializer(buildIntVal(pl->planContainer.size())), body);
-  appendStatement(varDec,body);
+  varDec = buildVariableDeclaration(SgName("nargs"), buildIntType(), buildAssignInitializer(buildIntVal(pl->numArgs())), stubBody);
+  appendStatement(varDec,stubBody);
+  varDec = buildVariableDeclaration(SgName("ninds"), buildIntType(), buildAssignInitializer(buildIntVal(pl->planContainer.size())), stubBody);
+  appendStatement(varDec,stubBody);
 
   // Add maximum grid size
   // Example : int gridsize = (set.size - 1) / BSIZE + 1;
@@ -1312,7 +1307,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   expresn = buildDivideOp(expresn, buildOpaqueVarRefExp(SgName("BSIZE")));
   expresn = buildAddOp(expresn, buildIntVal(1));
   varDec = buildVariableDeclaration(SgName("gridsize"), buildIntType(), buildAssignInitializer(expresn));
-  appendStatement(varDec, body);
+  appendStatement(varDec, stubBody);
   
   // Add plan variables
   SgExprListExp* exprList_args = buildExprListExp();
@@ -1342,18 +1337,18 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
     exprList_accs->append_expression( buildOpaqueVarRefExp(SgName("acc"+buildStr(i))) );
     exprList_inds->append_expression( buildIntVal(pl->args[i]->plan_index) );
   }
-  varDec = buildVariableDeclaration( SgName("args"), buildArrayType(op_dat, buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_args), body);
-  appendStatement(varDec,body);
-  varDec = buildVariableDeclaration( SgName("idxs"), buildArrayType(buildIntType(), buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_idxs), body);
-  appendStatement(varDec,body);
-  varDec = buildVariableDeclaration( SgName("ptrs"), buildArrayType(op_ptr, buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_ptrs), body);
-  appendStatement(varDec,body);
-  varDec = buildVariableDeclaration( SgName("dims"), buildArrayType(buildIntType(), buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_dims), body);
-  appendStatement(varDec,body);
-  varDec = buildVariableDeclaration( SgName("accs"), buildArrayType(op_access, buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_accs), body);
-  appendStatement(varDec,body);
-  varDec = buildVariableDeclaration( SgName("inds"), buildArrayType(buildIntType(), buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_inds), body);
-  appendStatement(varDec,body);
+  varDec = buildVariableDeclaration( SgName("args"), buildArrayType(op_dat, buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_args), stubBody);
+  appendStatement(varDec,stubBody);
+  varDec = buildVariableDeclaration( SgName("idxs"), buildArrayType(buildIntType(), buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_idxs), stubBody);
+  appendStatement(varDec,stubBody);
+  varDec = buildVariableDeclaration( SgName("ptrs"), buildArrayType(op_ptr, buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_ptrs), stubBody);
+  appendStatement(varDec,stubBody);
+  varDec = buildVariableDeclaration( SgName("dims"), buildArrayType(buildIntType(), buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_dims), stubBody);
+  appendStatement(varDec,stubBody);
+  varDec = buildVariableDeclaration( SgName("accs"), buildArrayType(op_access, buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_accs), stubBody);
+  appendStatement(varDec,stubBody);
+  varDec = buildVariableDeclaration( SgName("inds"), buildArrayType(buildIntType(), buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_inds), stubBody);
+  appendStatement(varDec,stubBody);
   
 
   // by Zohirul : Create and initialize the Plan variable pointer
@@ -1373,18 +1368,18 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   SgFunctionCallExp *expPlanFunc = buildFunctionCallExp(SgName("plan"), op_plan, planPars);
   
   // 3) then as the initializer of the Plan variable
-  varDec = buildVariableDeclaration( SgName("Plan"), buildPointerType(op_plan),  buildAssignInitializer(expPlanFunc), body);
-  appendStatement(varDec,body);
+  varDec = buildVariableDeclaration( SgName("Plan"), buildPointerType(op_plan),  buildAssignInitializer(expPlanFunc), stubBody);
+  appendStatement(varDec,stubBody);
 
   // Add block offset
-  varDec = buildVariableDeclaration(SgName("block_offset"), buildIntType(), buildAssignInitializer(buildIntVal(0)), body);
-  appendStatement(varDec,body);
+  varDec = buildVariableDeclaration(SgName("block_offset"), buildIntType(), buildAssignInitializer(buildIntVal(0)), stubBody);
+  appendStatement(varDec,stubBody);
 
-  preHandleConstAndGlobalData(fn, pl, body);
+  preHandleConstAndGlobalData(fn, pl);
 
   // Add Total Time
-  varDec = buildVariableDeclaration(SgName("total_time"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), body);
-  appendStatement(varDec,body);
+  varDec = buildVariableDeclaration(SgName("total_time"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), stubBody);
+  appendStatement(varDec,stubBody);
 
   // Add for loop for executing op_cuda_res<<<gridsize,bsize,nshared>>>
   // Create loop body
@@ -1411,14 +1406,14 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   cudaEventRecord( start, 0 );
   */
   //-----------------------------------------
-  varDec = buildVariableDeclaration(SgName("elapsed_time_ms"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), body);
+  varDec = buildVariableDeclaration(SgName("elapsed_time_ms"), buildFloatType(), buildAssignInitializer(buildFloatVal(0.0f)), stubBody);
   addTextForUnparser(varDec,"\ncudaEvent_t start, stop;", AstUnparseAttribute::e_after);
   appendStatement(varDec,blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("start")))), body);
+  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("start")))), stubBody);
   appendStatement(kCall,blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("stop")))), body);
+  kCall = buildFunctionCallStmt("cudaEventCreate", buildVoidType(), buildExprListExp(buildAddressOfOp(buildOpaqueVarRefExp(SgName("stop")))), stubBody);
   appendStatement(kCall,blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("start")), buildIntVal(0)), body);
+  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("start")), buildIntVal(0)), stubBody);
   appendStatement(kCall,blockLoopBody);
 
 
@@ -1475,7 +1470,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // We have to add the kernel configuration as part of the function name
   // as CUDA is not directly supported by ROSE - however, I understand
   // that CUDA and OpenCL support is coming soon!
-  kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<nblocks,BSIZE,nshared>>>", buildVoidType(), kPars, body);
+  kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<nblocks,BSIZE,nshared>>>", buildVoidType(), kPars, stubBody);
   appendStatement(kCall,blockLoopBody);
 
 
@@ -1490,22 +1485,23 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   total_time += elapsed_time_ms;
   */  
   //------------------------------------------------------
-  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("stop")), buildIntVal(0)), body);
+  kCall = buildFunctionCallStmt("cudaEventRecord", buildVoidType(), buildExprListExp(buildOpaqueVarRefExp(SgName("stop")), buildIntVal(0)), stubBody);
   appendStatement(kCall,blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, body);
+  kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, stubBody);
   appendStatement(kCall, blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventElapsedTime", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("&elapsed_time_ms")), buildOpaqueVarRefExp(SgName("start")), buildOpaqueVarRefExp(SgName("stop")) ), body);
+  kCall = buildFunctionCallStmt("cudaEventElapsedTime", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("&elapsed_time_ms")), buildOpaqueVarRefExp(SgName("start")),
+  buildOpaqueVarRefExp(SgName("stop")) ), stubBody);
   appendStatement(kCall, blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("start")) ), body);
+  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("start")) ), stubBody);
   appendStatement(kCall, blockLoopBody);
-  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("stop")) ), body);
+  kCall = buildFunctionCallStmt("cudaEventDestroy", buildVoidType(), buildExprListExp( buildOpaqueVarRefExp(SgName("stop")) ), stubBody);
   appendStatement(kCall, blockLoopBody);
   e = buildPlusAssignOp( buildOpaqueVarRefExp(SgName("total_time")), buildOpaqueVarRefExp(SgName("elapsed_time_ms")) );
   appendStatement(buildExprStatement(e),blockLoopBody);  
 
 
   // Call cuda thread synchronize
-  kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, body);
+  kCall = buildFunctionCallStmt("cudaThreadSynchronize", buildVoidType(), NULL, stubBody);
   appendStatement(kCall, blockLoopBody);
  
   // Increment the block_offset now
@@ -1517,19 +1513,18 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   SgExprStatement *blockLoopTest = buildExprStatement( buildLessThanOp( buildVarRefExp(blockLoopVar), buildOpaqueVarRefExp(SgName("Plan->ncolors")) ) );
   SgPlusPlusOp *blockLoopIncrement = buildPlusPlusOp(buildVarRefExp(blockLoopVar));
   SgStatement *blockLoopForLoop = buildForStatement(blockLoopInit, blockLoopTest, blockLoopIncrement, blockLoopBody);
-  appendStatement(blockLoopForLoop,body);
+  appendStatement(blockLoopForLoop,stubBody);
 
-  postHandleConstAndGlobalData(fn, pl, body);
+  postHandleConstAndGlobalData(fn, pl);
 
   // Add return statement
   SgReturnStmt* rtstmt = buildReturnStmt(buildOpaqueVarRefExp(SgName("total_time")));
-  appendStatement(rtstmt, body);
+  appendStatement(rtstmt, stubBody);
 }
 
 
 
-void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn,
-                                            op_par_loop_args *pl, SgBasicBlock *body)
+void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl)
 {
   for(int i=0; i<pl->numArgs(); i++)
   {
@@ -1540,14 +1535,14 @@ void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn,
     {
       // Build the body of the loop.
       SgExpression *lhs, *rhs;
-      lhs = buildPntrArrRefExp(buildVarRefExp(argLocal(i), body), buildVarRefExp(indVar));
+      lhs = buildPntrArrRefExp(buildVarRefExp(argLocal(i), kernelBody), buildVarRefExp(indVar));
       switch(pl->args[i]->access)
       {
         case OP_INC:
           rhs = buildIntVal(0);
           break;
         default:
-          rhs = buildPntrArrRefExp(buildVarRefExp(arg(i), body), buildVarRefExp(indVar));
+          rhs = buildPntrArrRefExp(buildVarRefExp(arg(i), kernelBody), buildVarRefExp(indVar));
           break;
       }
       SgStatement *action = buildAssignStatement(lhs, rhs);
@@ -1558,13 +1553,12 @@ void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn,
       SgExprStatement *viTest = buildExprStatement(buildLessThanOp(buildVarRefExp(indVar), buildIntVal(pl->args[i]->dim)));
       SgPlusPlusOp *viIncrement = buildPlusPlusOp(buildVarRefExp(indVar));
       SgStatement *viForLoop = buildForStatement(viInit, viTest, viIncrement, viLoopBody);
-      appendStatement(viForLoop,body);
+      appendStatement(viForLoop,kernelBody);
     }
   }
 }
 
-void OPParLoop::postKernelGlobalDataHandling(SgFunctionCallExp *fn,
-                                             op_par_loop_args *pl, SgBasicBlock *body)
+void OPParLoop::postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl)
 {
   for(int i=0; i<pl->numArgs(); i++)
   {
@@ -1605,7 +1599,7 @@ void OPParLoop::postKernelGlobalDataHandling(SgFunctionCallExp *fn,
       SgExprStatement *viTest = buildExprStatement(buildLessThanOp(buildOpaqueVarRefExp(indVar), buildIntVal(pl->args[i]->dim)));
       SgPlusPlusOp *viIncrement = buildPlusPlusOp(buildOpaqueVarRefExp(indVar));
       SgStatement *viForLoop = buildForStatement(viInit, viTest, viIncrement, viLoopBody);
-      appendStatement(viForLoop,body);
+      appendStatement(viForLoop,kernelBody);
     }
   }
 }
@@ -1613,23 +1607,22 @@ void OPParLoop::postKernelGlobalDataHandling(SgFunctionCallExp *fn,
 
 
 
-void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn,
-                                            op_par_loop_args *pl, SgBasicBlock *body)
+void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop_args *pl)
 {
   // Handle Reduct
   ///////////////////////
 
   bool required = false;
-  SgVariableDeclaration* varDec = buildVariableDeclaration(SgName("reduct_bytes"), buildIntType(), buildAssignInitializer(buildIntVal(0)), body);
+  SgVariableDeclaration* varDec = buildVariableDeclaration(SgName("reduct_bytes"), buildIntType(), buildAssignInitializer(buildIntVal(0)), stubBody);
   SgName varName = isSgVariableDeclaration(varDec)->get_definition()->get_vardefn()->get_name();  
-  appendStatement(varDec,body);
+  appendStatement(varDec,stubBody);
 
-  SgVariableDeclaration* varDec2 = buildVariableDeclaration(SgName("reduct_size"), buildIntType(), buildAssignInitializer(buildIntVal(0)), body);
+  SgVariableDeclaration* varDec2 = buildVariableDeclaration(SgName("reduct_size"), buildIntType(), buildAssignInitializer(buildIntVal(0)), stubBody);
   SgName varName2 = isSgVariableDeclaration(varDec2)->get_definition()->get_vardefn()->get_name();  
-  appendStatement(varDec2,body);
+  appendStatement(varDec2,stubBody);
 
-  SgExpression* varExp = buildVarRefExp(varName, body);
-  SgExpression* varExp2 = buildVarRefExp(varName2, body);
+  SgExpression* varExp = buildVarRefExp(varName, stubBody);
+  SgExpression* varExp2 = buildVarRefExp(varName2, stubBody);
   for(unsigned int i = 0; i < pl->args.size(); i++)
   {
     if(pl->args[i]->consideredAsReduction())
@@ -1640,33 +1633,33 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn,
       list->append_expression(rhs);
       rhs = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), list);
       SgExpression* expr = buildPlusAssignOp(varExp , rhs);
-      appendStatement(buildExprStatement(expr), body);
+      appendStatement(buildExprStatement(expr), stubBody);
 
       list = buildExprListExp();
       list->append_expression(varExp2);
       list->append_expression(buildSizeOfOp(pl->args[i]->type));
       rhs = buildFunctionCallExp(SgName("MAX"), buildIntType(), list);
       expr = buildAssignOp(varExp2, rhs);
-      appendStatement(buildExprStatement(expr), body);
+      appendStatement(buildExprStatement(expr), stubBody);
     }
   }
 
   SgExpression* expShared = buildMultiplyOp( varExp2, buildDivideOp(buildOpaqueVarRefExp(SgName("BSIZE")), buildIntVal(2)) );
-  SgVariableDeclaration* varDec3 = buildVariableDeclaration(SgName("reduct_shared"), buildIntType(), buildAssignInitializer(expShared), body);
+  SgVariableDeclaration* varDec3 = buildVariableDeclaration(SgName("reduct_shared"), buildIntType(), buildAssignInitializer(expShared), stubBody);
   SgName varName3 = isSgVariableDeclaration(varDec2)->get_definition()->get_vardefn()->get_name();  
-  appendStatement(varDec3,body);
+  appendStatement(varDec3,stubBody);
 
   if(required)
   {
     // call reallocReductArrays(reduct_bytes);
     SgExprListExp* kPars = buildExprListExp();
     kPars->append_expression(varExp);
-    SgStatement *kCall = buildFunctionCallStmt("reallocReductArrays", buildVoidType(), kPars, body);
-      appendStatement(kCall, body);
+    SgStatement *kCall = buildFunctionCallStmt("reallocReductArrays", buildVoidType(), kPars, stubBody);
+      appendStatement(kCall, stubBody);
 
     // fixup with reduct_bytes
     SgExpression* expr = buildAssignOp(varExp, buildIntVal(0));
-    appendStatement(buildExprStatement(expr), body);
+    appendStatement(buildExprStatement(expr), stubBody);
     
     for(unsigned int i = 0; i < pl->args.size(); i++)
     {
@@ -1675,23 +1668,23 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn,
         kPars = buildExprListExp();
         kPars->append_expression((buildOpaqueVarRefExp(SgName("*"+arg(i)))));
         kPars->append_expression(varExp);
-        kCall = buildFunctionCallStmt("push_op_dat_as_reduct", buildVoidType(), kPars, body);
-        appendStatement(kCall,body);
+        kCall = buildFunctionCallStmt("push_op_dat_as_reduct", buildVoidType(), kPars, stubBody);
+        appendStatement(kCall,stubBody);
 
         expr =  buildMultiplyOp(buildIntVal(pl->args[i]->dim), buildSizeOfOp(pl->args[i]->type));
         SgExprListExp* expressions = buildExprListExp();
         expressions->append_expression(expr);
         expr = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), expressions);
         expr = buildPlusAssignOp(varExp , expr);
-        appendStatement(buildExprStatement(expr), body);
+        appendStatement(buildExprStatement(expr), stubBody);
       }
     }
 
     // call mvReductArraysToDevice(reduct_bytes)
     kPars = buildExprListExp();
     kPars->append_expression(varExp);
-    kCall = buildFunctionCallStmt("mvReductArraysToDevice", buildVoidType(), kPars, body);
-    appendStatement(kCall,body);
+    kCall = buildFunctionCallStmt("mvReductArraysToDevice", buildVoidType(), kPars, stubBody);
+    appendStatement(kCall,stubBody);
 
     // handling global reduction - requires global memory allocation
     for(unsigned int i = 0; i < pl->args.size(); i++)
@@ -1700,14 +1693,14 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn,
       {
         // declare block_reduct
         varDec = buildVariableDeclaration(SgName("block_reduct" + buildStr(i)), buildPointerType(buildVoidType()), buildAssignInitializer(buildIntVal(0)));
-        appendStatement(varDec, body);
+        appendStatement(varDec, stubBody);
 
         // allocate memory
         kPars = buildExprListExp();
         kPars->append_expression(buildAddressOfOp( buildOpaqueVarRefExp(SgName("block_reduct") + buildStr(i)) ));
         kPars->append_expression(buildMultiplyOp( buildOpaqueVarRefExp(SgName("gridsize")), buildSizeOfOp(pl->args[i]->type) ));
-        kCall = buildFunctionCallStmt("cudaMalloc", buildVoidType(), kPars, body);
-        appendStatement(kCall,body);
+        kCall = buildFunctionCallStmt("cudaMalloc", buildVoidType(), kPars, stubBody);
+        appendStatement(kCall,stubBody);
       }
     }
   }
@@ -1717,10 +1710,10 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn,
   ///////////////////////
 
   required = false;
-  varDec = buildVariableDeclaration(SgName("const_bytes"), buildIntType(), buildAssignInitializer(buildIntVal(0)), body);
+  varDec = buildVariableDeclaration(SgName("const_bytes"), buildIntType(), buildAssignInitializer(buildIntVal(0)), stubBody);
   varName = isSgVariableDeclaration(varDec)->get_definition()->get_vardefn()->get_name();  
-  appendStatement(varDec,body);
-  varExp = buildVarRefExp(varName, body);
+  appendStatement(varDec,stubBody);
+  varExp = buildVarRefExp(varName, stubBody);
   for(unsigned int i = 0; i < pl->args.size(); i++)
   {
     if(pl->args[i]->consideredAsConst())
@@ -1731,7 +1724,7 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn,
       expressions->append_expression(rhs);
       rhs = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), expressions);
       SgExpression* expr = buildPlusAssignOp(varExp , rhs);
-      appendStatement(buildExprStatement(expr), body);
+      appendStatement(buildExprStatement(expr), stubBody);
     }
   }
 
@@ -1740,12 +1733,12 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn,
     // call reallocConstArrays(reduct_bytes);
     SgExprListExp* kPars = buildExprListExp();
     kPars->append_expression(varExp);
-    SgStatement *kCall = buildFunctionCallStmt("reallocConstArrays", buildVoidType(), kPars, body);
-    appendStatement(kCall, body);
+    SgStatement *kCall = buildFunctionCallStmt("reallocConstArrays", buildVoidType(), kPars, stubBody);
+    appendStatement(kCall, stubBody);
 
     // fixup with reduct_bytes
     SgExpression* expr = buildAssignOp(varExp, buildIntVal(0));
-    appendStatement(buildExprStatement(expr), body);
+    appendStatement(buildExprStatement(expr), stubBody);
     
     for(unsigned int i = 0; i < pl->args.size(); i++)
     {
@@ -1754,28 +1747,27 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn,
         kPars = buildExprListExp();
         kPars->append_expression((buildOpaqueVarRefExp(SgName("*"+arg(i)))));
         kPars->append_expression(varExp);
-        kCall = buildFunctionCallStmt("push_op_dat_as_const", buildVoidType(), kPars, body);
-        appendStatement(kCall,body);
+        kCall = buildFunctionCallStmt("push_op_dat_as_const", buildVoidType(), kPars, stubBody);
+        appendStatement(kCall,stubBody);
 
         expr =  buildMultiplyOp(buildIntVal(pl->args[i]->dim), buildSizeOfOp(pl->args[i]->type));
         SgExprListExp* expressions = buildExprListExp();
         expressions->append_expression(expr);
         expr = buildFunctionCallExp(SgName("ROUND_UP"), buildIntType(), expressions);
         expr = buildPlusAssignOp(varExp , expr);
-        appendStatement(buildExprStatement(expr), body);
+        appendStatement(buildExprStatement(expr), stubBody);
       }
     }
 
     // call mvReductArraysToDevice(reduct_bytes)
     kPars = buildExprListExp();
     kPars->append_expression(varExp);
-    kCall = buildFunctionCallStmt("mvConstArraysToDevice", buildVoidType(), kPars, body);
-    appendStatement(kCall,body);
+    kCall = buildFunctionCallStmt("mvConstArraysToDevice", buildVoidType(), kPars, stubBody);
+    appendStatement(kCall,stubBody);
   }
 }
 
-void OPParLoop::postHandleConstAndGlobalData(SgFunctionCallExp *fn,
-                                             op_par_loop_args *pl, SgBasicBlock *body)
+void OPParLoop::postHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop_args *pl)
 {
   // Handle Reduct
   ///////////////////////
@@ -1794,8 +1786,8 @@ void OPParLoop::postHandleConstAndGlobalData(SgFunctionCallExp *fn,
     // call reallocReductArrays(reduct_bytes);
     SgExprListExp* kPars = buildExprListExp();
     kPars->append_expression(buildOpaqueVarRefExp(SgName("reduct_bytes")));
-    SgStatement *kCall = buildFunctionCallStmt("mvReductArraysToHost", buildVoidType(), kPars, body);
-    appendStatement(kCall, body);
+    SgStatement *kCall = buildFunctionCallStmt("mvReductArraysToHost", buildVoidType(), kPars, stubBody);
+    appendStatement(kCall, stubBody);
 
     for(unsigned int i = 0; i < pl->args.size(); i++)
     {
@@ -1803,14 +1795,14 @@ void OPParLoop::postHandleConstAndGlobalData(SgFunctionCallExp *fn,
       {
         kPars = buildExprListExp();
         kPars->append_expression(buildOpaqueVarRefExp(SgName("*"+arg(i))));
-        kCall = buildFunctionCallStmt("pop_op_dat_as_reduct", buildVoidType(), kPars, body);
-         appendStatement(kCall, body);
+        kCall = buildFunctionCallStmt("pop_op_dat_as_reduct", buildVoidType(), kPars, stubBody);
+         appendStatement(kCall, stubBody);
 
         // free block_reduct memory
         kPars = buildExprListExp();
         kPars->append_expression( buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
-        kCall = buildFunctionCallStmt("cudaFree", buildVoidType(), kPars, body);
-        appendStatement(kCall,body);
+        kCall = buildFunctionCallStmt("cudaFree", buildVoidType(), kPars, stubBody);
+        appendStatement(kCall,stubBody);
       }
     }
   }

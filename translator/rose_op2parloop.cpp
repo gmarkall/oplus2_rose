@@ -367,25 +367,12 @@ void OPParLoop::createEndTimerBlock(SgScopeStatement *scope, bool accumulateTime
   }
 }
 
-
-/*
- *  Generate Seperate File For the Special Kernel
- *  ---------------------------------------------
- */ 
-void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
+SgFunctionParameterList* OPParLoop::createSpecialParameters(op_par_loop_args *pl)
 {
-  string kernel_name = getName(pl->kernel);
-  createKernelFile(kernel_name);
-
-  initialiseDataTypes();
- 
-  // 1 FUNCTION DEFINITION <START>
-  // =======================================
-
   // We need to build a list of parameters for our __global__ function,
   // based on the arguments given to op_par_loop_3 earlier:
   SgFunctionParameterList *paramList = buildFunctionParameterList();
-  bool reduction_required = false;
+  reduction_required = false;
   for(int i=0; i<pl->numArgs(); i++)
   {
     if(pl->args[i]->consideredAsReduction())
@@ -405,6 +392,96 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
       appendArg(paramList, block_reduct);
     }
   }
+
+  return paramList;
+}
+
+SgFunctionParameterList* OPParLoop::createStandardParameters(op_par_loop_args *pl)
+{
+  SgFunctionParameterList *paramList = buildFunctionParameterList();
+  SgType *argType = NULL;
+  SgInitializedName *nm = NULL;
+  
+  // First Assemble all expressions using plan container <for arguments with indirection>
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
+  {
+    // Add "ind_arg0"
+    argType = buildPointerType(pl->planContainer[i]->type);
+    nm = buildInitializedName(SgName("ind_arg" + buildStr(i)), argType);
+    appendArg(paramList, nm);
+
+    // Add "ind_arg0_ptrs"
+    argType = buildPointerType(buildIntType());
+    nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_ptrs"), argType);
+    appendArg(paramList, nm);
+
+    // Add "ind_arg0_sizes"
+    nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_sizes"), argType);
+    appendArg(paramList, nm);
+  
+    // Add "ind_arg0_offset"
+    nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_offset"), argType);
+    appendArg(paramList, nm);
+  }
+  // Then add all the pointers
+  reduction_required = false;
+  for(unsigned int i=0; i<pl->args.size(); i++)
+  {
+    if(pl->args[i]->consideredAsReduction())
+      reduction_required = true;
+    if(pl->args[i]->usesIndirection())
+    {
+      // Add "arg1_ptr"
+      argType = buildPointerType(buildIntType());
+      nm = buildInitializedName(arg(i) + SgName("_ptrs"), argType);
+      appendArg(paramList, nm);
+    }
+    else if(pl->args[i]->isGlobal())
+    {
+      argType = buildPointerType(pl->args[i]->type);
+      nm = buildInitializedName(arg(i), argType);
+      appendArg(paramList, nm);
+    }
+    else
+    {
+      argType = buildPointerType(pl->args[i]->type);
+      nm = buildInitializedName(arg(i) + SgName("_d"), argType);
+      appendArg(paramList, nm);
+    }
+  }
+  // Other stuff
+  argType = buildIntType();
+  nm = buildInitializedName(SgName("block_offset"), argType);
+  appendArg(paramList, nm);
+  argType = buildPointerType(argType);
+  nm = buildInitializedName(SgName("blkmap"), argType);
+  appendArg(paramList, nm);
+  nm = buildInitializedName(SgName("offset"), argType);
+  appendArg(paramList, nm);
+  nm = buildInitializedName(SgName("nelems"), argType);
+  appendArg(paramList, nm);
+  nm = buildInitializedName(SgName("ncolors"), argType);
+  appendArg(paramList, nm);
+  nm = buildInitializedName(SgName("colors"), argType);
+  appendArg(paramList, nm);
+  if(reduction_required)
+    appendArg(paramList, buildInitializedName(SgName("block_reduct"), buildVoidType()));
+
+  return paramList;
+}
+
+/*
+ *  Generate Seperate File For the Special Kernel
+ *  ---------------------------------------------
+ */ 
+void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
+{
+  string kernel_name = getName(pl->kernel);
+  createKernelFile(kernel_name);
+
+  initialiseDataTypes();
+ 
+  SgFunctionParameterList *paramList = createSpecialParameters(pl);
  
   createKernel(kernel_name, paramList);
 
@@ -655,81 +732,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   createKernelFile(kernel_name);
   
   initialiseDataTypes();
-  
-  // 1.1 FUNCTION DEFINITION - CREATE PARAMS
-  // ===============================================
-  
-  SgFunctionParameterList *paramList = buildFunctionParameterList();
-  SgType *argType = NULL;
-  SgInitializedName *nm = NULL;
-  
-  // First Assemble all expressions using plan container <for arguments with indirection>
-  for(unsigned int i=0; i<pl->planContainer.size(); i++)
-  {
-    // Add "ind_arg0"
-    argType = buildPointerType(pl->planContainer[i]->type);
-    nm = buildInitializedName(SgName("ind_arg" + buildStr(i)), argType);
-    appendArg(paramList, nm);
-
-    // Add "ind_arg0_ptrs"
-    argType = buildPointerType(buildIntType());
-    nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_ptrs"), argType);
-    appendArg(paramList, nm);
-
-    // Add "ind_arg0_sizes"
-    nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_sizes"), argType);
-    appendArg(paramList, nm);
-  
-    // Add "ind_arg0_offset"
-    nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_offset"), argType);
-    appendArg(paramList, nm);
-  }
-  // Then add all the pointers
-  bool reduction_required = false;
-  for(unsigned int i=0; i<pl->args.size(); i++)
-  {
-    if(pl->args[i]->consideredAsReduction())
-      reduction_required = true;
-    if(pl->args[i]->usesIndirection())
-    {
-      // Add "arg1_ptr"
-      argType = buildPointerType(buildIntType());
-      nm = buildInitializedName(arg(i) + SgName("_ptrs"), argType);
-      appendArg(paramList, nm);
-    }
-    else if(pl->args[i]->isGlobal())
-    {
-      argType = buildPointerType(pl->args[i]->type);
-      nm = buildInitializedName(arg(i), argType);
-      appendArg(paramList, nm);
-    }
-    else
-    {
-      argType = buildPointerType(pl->args[i]->type);
-      nm = buildInitializedName(arg(i) + SgName("_d"), argType);
-      appendArg(paramList, nm);
-    }
-  }
-  // Other stuff
-  argType = buildIntType();
-  nm = buildInitializedName(SgName("block_offset"), argType);
-  appendArg(paramList, nm);
-  argType = buildPointerType(argType);
-  nm = buildInitializedName(SgName("blkmap"), argType);
-  appendArg(paramList, nm);
-  nm = buildInitializedName(SgName("offset"), argType);
-  appendArg(paramList, nm);
-  nm = buildInitializedName(SgName("nelems"), argType);
-  appendArg(paramList, nm);
-  nm = buildInitializedName(SgName("ncolors"), argType);
-  appendArg(paramList, nm);
-  nm = buildInitializedName(SgName("colors"), argType);
-  appendArg(paramList, nm);
-  if(reduction_required)
-    appendArg(paramList, buildInitializedName(SgName("block_reduct"), buildVoidType()));
-  
-  // 1.2 ADD FUNCTION DEFINITION
-  // ===============================================
+ 
+  SgFunctionParameterList *paramList = createStandardParameters(pl);
 
   createKernel(kernel_name, paramList);
 

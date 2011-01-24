@@ -98,6 +98,8 @@ class OPParLoop : public AstSimpleProcessing
     SgType *op_set, *op_dat, *op_ptr, *op_access, *op_plan;
     SgBasicBlock *kernelBody, *stubBody, *reductionBody;
     
+    bool reduction_required;
+
     void generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl);
     void generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl);
     string getName(SgFunctionRefExp *fn);
@@ -115,6 +117,8 @@ class OPParLoop : public AstSimpleProcessing
     void createSharedVariable(string name, SgType *type, SgScopeStatement *scope);
     void createBeginTimerBlock(SgScopeStatement *scope);
     void createEndTimerBlock(SgScopeStatement *scope, bool accumulateTime);
+    SgFunctionParameterList* createSpecialParameters(op_par_loop_args *pl);
+    SgFunctionParameterList* createStandardParameters(op_par_loop_args *pl);
 };
 
 #endif

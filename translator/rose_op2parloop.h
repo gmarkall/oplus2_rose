@@ -119,6 +119,7 @@ class OPParLoop : public AstSimpleProcessing
     void createEndTimerBlock(SgScopeStatement *scope, bool accumulateTime);
     SgFunctionParameterList* createSpecialParameters(op_par_loop_args *pl);
     SgFunctionParameterList* createStandardParameters(op_par_loop_args *pl);
+    void createSharedVariableDeclarations(op_par_loop_args *pl);
 };
 
 #endif

@@ -470,6 +470,53 @@ SgFunctionParameterList* OPParLoop::createStandardParameters(op_par_loop_args *p
   return paramList;
 }
 
+void OPParLoop::createSharedVariableDeclarations(op_par_loop_args *pl)
+{
+  // Add shared memory declaration
+  SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("shared"), buildArrayType(buildCharType(), NULL), NULL, kernelBody);
+  addTextForUnparser(varDec,"\n\n  extern __shared__ ", AstUnparseAttribute::e_after);
+  appendStatement(varDec,kernelBody);
+
+  // Add shared variables for the planContainer variables - for each category <ptr>
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
+  {
+    createSharedVariable("ind_"+arg(i)+"_ptr", buildPointerType(buildIntType()), kernelBody);
+  }
+
+  // Add shared variables for the planContainer variables - for each category <size>
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
+  {
+    createSharedVariable("ind_"+arg(i)+"_size", buildIntType(), kernelBody);
+  }
+
+  // Add shared variables for the planContainer variables - for each category <s for shared>
+  for(unsigned int i=0; i<pl->planContainer.size(); i++)
+  {
+    SgType *t = buildPointerType(pl->planContainer[i]->type);
+    createSharedVariable("ind_"+arg(i)+"_s", t, kernelBody);
+  }
+
+  // Then add respective shared variables for each argument
+  for(unsigned int i=0; i<pl->args.size(); i++)
+  {
+    if(pl->args[i]->usesIndirection())
+    {
+      createSharedVariable(arg(i)+"_ptr", buildPointerType(buildIntType()), kernelBody);
+    }
+    else if(!pl->args[i]->consideredAsConst())
+    {
+      SgType *t = buildPointerType(pl->args[i]->type);
+      createSharedVariable(arg(i), t, kernelBody);
+    }
+  }
+
+  createSharedVariable("nelem2", buildIntType(), kernelBody);
+  createSharedVariable("ncolor", buildIntType(), kernelBody);
+  createSharedVariable("color", buildPointerType(buildIntType()), kernelBody);
+  createSharedVariable("blockId", buildIntType(), kernelBody);
+  createSharedVariable("nelem", buildIntType(), kernelBody);
+}
+
 /*
  *  Generate Seperate File For the Special Kernel
  *  ---------------------------------------------
@@ -751,54 +798,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
     }
   }
 
+  createSharedVariableDeclarations(pl);
   
-  // 3. ADD SHARED MEMORY DECLARATIONS
-  // ===============================================
-
-  // Add shared memory declaration
-  SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("shared"), buildArrayType(buildCharType(), NULL), NULL, kernelBody);
-  addTextForUnparser(varDec,"\n\n  extern __shared__ ", AstUnparseAttribute::e_after);
-  appendStatement(varDec,kernelBody);
-
-  // Add shared variables for the planContainer variables - for each category <ptr>
-  for(unsigned int i=0; i<pl->planContainer.size(); i++)
-  {
-    createSharedVariable("ind_"+arg(i)+"_ptr", buildPointerType(buildIntType()), kernelBody);
-  }
-
-  // Add shared variables for the planContainer variables - for each category <size>
-  for(unsigned int i=0; i<pl->planContainer.size(); i++)
-  {
-    createSharedVariable("ind_"+arg(i)+"_size", buildIntType(), kernelBody);
-  }
-
-  // Add shared variables for the planContainer variables - for each category <s for shared>
-  for(unsigned int i=0; i<pl->planContainer.size(); i++)
-  {
-    SgType *t = buildPointerType(pl->planContainer[i]->type);
-    createSharedVariable("ind_"+arg(i)+"_s", t, kernelBody);
-  }
-
-  // Then add respective shared variables for each argument
-  for(unsigned int i=0; i<pl->args.size(); i++)
-  {
-    if(pl->args[i]->usesIndirection())
-    {
-      createSharedVariable(arg(i)+"_ptr", buildPointerType(buildIntType()), kernelBody);
-    }
-    else if(!pl->args[i]->consideredAsConst())
-    {
-      SgType *t = buildPointerType(pl->args[i]->type);
-      createSharedVariable(arg(i), t, kernelBody);
-    }
-  }
-
-  createSharedVariable("nelem2", buildIntType(), kernelBody);
-  createSharedVariable("ncolor", buildIntType(), kernelBody);
-  createSharedVariable("color", buildPointerType(buildIntType()), kernelBody);
-  createSharedVariable("blockId", buildIntType(), kernelBody);
-  createSharedVariable("nelem", buildIntType(), kernelBody);
-
   // 4.1 GET SIZES AND SHIFT POINTERS AND DIRECT MAPPED DATA
   // ========================================================
 
@@ -824,7 +825,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
 
   // Cache offset[blockId]
   expression = buildOpaqueVarRefExp(SgName("offset[blockId]"));
-  varDec = buildVariableDeclaration(SgName("cur_offset"), buildIntType(), buildAssignInitializer(expression), ifBody);
+  SgVariableDeclaration* varDec = buildVariableDeclaration(SgName("cur_offset"), buildIntType(), buildAssignInitializer(expression), ifBody);
   appendStatement(varDec, ifBody);
 
   // Add color variable

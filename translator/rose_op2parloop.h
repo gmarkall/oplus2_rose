@@ -42,8 +42,6 @@ using namespace std;
 using namespace SageBuilder;
 using namespace SageInterface;
 
-// The choice of name for this class is totally confusing!
-
 class op_par_loop_args
 {
   public:

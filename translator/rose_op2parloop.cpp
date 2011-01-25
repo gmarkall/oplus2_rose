@@ -549,9 +549,29 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
 
   preKernelGlobalDataHandling(fn, pl);
 
-  // 3 MAIN EXECUTION LOOP <BEGIN>
-  // =======================================
+  createSpecialKernelExecutionLoop(kernel_name, pl);
+
+  postKernelGlobalDataHandling(fn, pl);
+
+  if (reduction_required)
+  {
+    generateReductionKernel(kernel_name, pl);
+  }
+
+  generateSpecialStub(fn, kernel_name, pl);
+}
+
+void OPParLoop::createSpecialKernelExecutionLoop(string kernel_name, op_par_loop_args *pl)
+{  
   SgScopeStatement *loopBody = buildBasicBlock();
+
+  SgName induction_variable = createSpecialKernelLoopConstruct(kernel_name, pl, loopBody);
+ 
+  createSpecialUserFunctionCall(kernel_name, pl, induction_variable, loopBody);
+}
+
+SgName OPParLoop::createSpecialKernelLoopConstruct(string kernel_name, op_par_loop_args* pl, SgScopeStatement* loopBody)
+{
   SgExpression *rhs = buildAddOp(buildOpaqueVarRefExp("threadIdx.x"), buildMultiplyOp(buildOpaqueVarRefExp("blockIdx.x"), buildOpaqueVarRefExp("blockDim.x")));
   SgVariableDeclaration *loopVarDec = buildVariableDeclaration(SgName("n"), buildIntType(), buildAssignInitializer(rhs), loopBody);
   SgName loopVar = loopVarDec->get_definition()->get_vardefn()->get_name();
@@ -565,17 +585,18 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   SgForStatement *forLoop = buildForStatement(loopVarDec, test, increment, loopBody);
 
   appendStatement(forLoop,kernelBody);
-  
-  // 3.1 FIRE KERNEL
-  // ===============================================
-  // Next we build a call to the __device__ function. We build the parameters
-  // for this call first, then the call, and add it into the outer loop body.
+
+  return loopVar;
+}
+
+void OPParLoop::createSpecialUserFunctionCall(string kernel_name, op_par_loop_args *pl, SgName& induction_variable, SgScopeStatement *scope)
+{  
   SgExprListExp *kPars = buildExprListExp();
   for(int i=0; i<pl->numArgs(); i++)
   {
     if(pl->args[i]->isNotGlobal())
     {
-      SgExpression *e = buildAddOp(buildOpaqueVarRefExp(arg(i)), buildMultiplyOp(buildOpaqueVarRefExp(loopVar), buildIntVal(pl->args[i]->dim)));
+      SgExpression *e = buildAddOp(buildOpaqueVarRefExp(arg(i)), buildMultiplyOp(buildOpaqueVarRefExp(induction_variable), buildIntVal(pl->args[i]->dim)));
       kPars->append_expression(e);
     }
     else
@@ -585,24 +606,9 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
     }
   }
   SgExprStatement *uf = buildFunctionCallStmt(SgName(kernel_name), buildVoidType(), kPars);
-  appendStatement(uf,loopBody);
-
-  // 3 MAIN EXECUTION LOOP <END>
-  // =======================================
-  // Now we have completed the body of the outer for loop, we can build an initialiser, 
-  // an increment and a test statement. The we insert this loop into the __gloabl__ function.
-  // Because threadIdx.x etc are not really variables, we invent "opaque" variables with these
-  // names.
-  
-  postKernelGlobalDataHandling(fn, pl);
-
-  if (reduction_required)
-  {
-    generateReductionKernel(kernel_name, pl);
-  }
-
-  generateSpecialStub(fn, kernel_name, pl);
+  appendStatement(uf,scope);
 }
+
 
 SgFunctionParameterList* OPParLoop::createReductionParameters(op_par_loop_args *pl)
 {

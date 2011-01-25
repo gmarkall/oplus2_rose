@@ -699,17 +699,7 @@ void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, o
   SgFunctionParameterList *paramList = buildSpecialStubParameters(pl);
   createStub(kernel_name, paramList);
 
-  // Declare gridsize and bsize
-  SgExpression *e = buildOpaqueVarRefExp(SgName("BSIZE"));
-  SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("bsize"), buildIntType(), buildAssignInitializer(e));
-  appendStatement(varDec, stubBody);
-  
-  e = buildOpaqueVarRefExp(SgName("set.size"));
-  e = buildSubtractOp(e, buildIntVal(1));
-  e = buildDivideOp(e, buildOpaqueVarRefExp(SgName("bsize")));
-  e = buildAddOp(e, buildIntVal(1));
-  varDec = buildVariableDeclaration(SgName("gridsize"), buildIntType(), buildAssignInitializer(e));
-  appendStatement(varDec, stubBody);
+  createSpecialStubVariables();
 
   preHandleConstAndGlobalData(fn, pl);
 
@@ -730,6 +720,22 @@ void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, o
   appendStatement(rtstmt, stubBody);
   
 }
+
+void OPParLoop::createSpecialStubVariables()
+{
+  // Declare gridsize and bsize
+  SgExpression *e = buildOpaqueVarRefExp(SgName("BSIZE"));
+  SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("bsize"), buildIntType(), buildAssignInitializer(e));
+  appendStatement(varDec, stubBody);
+  
+  e = buildOpaqueVarRefExp(SgName("set.size"));
+  e = buildSubtractOp(e, buildIntVal(1));
+  e = buildDivideOp(e, buildOpaqueVarRefExp(SgName("bsize")));
+  e = buildAddOp(e, buildIntVal(1));
+  varDec = buildVariableDeclaration(SgName("gridsize"), buildIntType(), buildAssignInitializer(e));
+  appendStatement(varDec, stubBody);
+}
+
 
 void OPParLoop::createSpecialKernelCall(string kernel_name, op_par_loop_args *pl)
 {

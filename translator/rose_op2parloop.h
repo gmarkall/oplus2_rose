@@ -124,6 +124,7 @@ class OPParLoop : public AstSimpleProcessing
     void generateStandardStub(SgFunctionCallExp *fn, string kernel_name, op_par_loop_args *pl);
     void generateReductionKernel(string kernel_name, op_par_loop_args *pl);
     void createReductionKernelCall(string kernel_name, op_par_loop_args *pl);
+    void createSpecialKernelCall(string kernel_name, op_par_loop_args *pl);
 };
 
 #endif

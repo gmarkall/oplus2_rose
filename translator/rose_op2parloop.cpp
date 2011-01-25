@@ -715,35 +715,9 @@ void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, o
 
   createBeginTimerBlock(stubBody);
 
-  // To add a call to the CUDA function, we need to build a list of parameters that
-  // we pass to it. The easiest way to do this is to name the members of the 
-  // struct to which they belong, but this is not the most elegant approach.
-  SgExprListExp *kPars = buildExprListExp();
-  for(int i=0; i<pl->numArgs(); i++)
-  {
-    SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(i)+"->dat_d"));
-    SgCastExp* e_cast = buildCastExp(e, buildPointerType(pl->args[i]->type));
-    kPars->append_expression(e_cast);
-  }
-  e = buildOpaqueVarRefExp(SgName("set.size"));
-  kPars->append_expression(e);
-  for(int i=0; i<pl->numArgs(); i++)
-  {
-    if(pl->args[i]->consideredAsReduction())
-    {
-      kPars->append_expression(buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
-    }
-  }
-    
+  createSpecialKernelCall(kernel_name, pl);
 
-  // We have to add the kernel configuration as part of the function name
-  // as CUDA is not directly supported by ROSE - however, I understand
-  // that CUDA and OpenCL support is coming soon!
-  SgExprStatement *kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<gridsize,bsize,reduct_shared>>>", buildVoidType(), kPars, stubBody);
-  appendStatement(kCall,stubBody);
-
-  // If we have reduction operations it requires a second kernel launch (gridsize = 1, blocksize = 1)
-  if(reduction_required)
+  if (reduction_required)
   {
     createReductionKernelCall(kernel_name, pl);
   }
@@ -755,6 +729,35 @@ void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, o
   SgReturnStmt* rtstmt = buildReturnStmt(buildOpaqueVarRefExp(SgName("elapsed_time_ms")));
   appendStatement(rtstmt, stubBody);
   
+}
+
+void OPParLoop::createSpecialKernelCall(string kernel_name, op_par_loop_args *pl)
+{
+  // To add a call to the CUDA function, we need to build a list of parameters that
+  // we pass to it. The easiest way to do this is to name the members of the 
+  // struct to which they belong, but this is not the most elegant approach.
+  SgExprListExp *kPars = buildExprListExp();
+  for(int i=0; i<pl->numArgs(); i++)
+  {
+    SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(i)+"->dat_d"));
+    SgCastExp* e_cast = buildCastExp(e, buildPointerType(pl->args[i]->type));
+    kPars->append_expression(e_cast);
+  }
+  SgExpression *e = buildOpaqueVarRefExp(SgName("set.size"));
+  kPars->append_expression(e);
+  for(int i=0; i<pl->numArgs(); i++)
+  {
+    if(pl->args[i]->consideredAsReduction())
+    {
+      kPars->append_expression(buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
+    }
+  }
+
+  // We have to add the kernel configuration as part of the function name
+  // as CUDA is not directly supported by ROSE - however, I understand
+  // that CUDA and OpenCL support is coming soon!
+  SgExprStatement *kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<gridsize,bsize,reduct_shared>>>", buildVoidType(), kPars, stubBody);
+  appendStatement(kCall,stubBody);
 }
 
 void OPParLoop::createReductionKernelCall(string kernel_name, op_par_loop_args *pl)

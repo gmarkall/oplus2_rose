@@ -564,6 +564,8 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   SgPlusAssignOp *increment = buildPlusAssignOp(lhs, rhs);
   SgForStatement *forLoop = buildForStatement(loopVarDec, test, increment, loopBody);
 
+  appendStatement(forLoop,kernelBody);
+  
   // 3.1 FIRE KERNEL
   // ===============================================
   // Next we build a call to the __device__ function. We build the parameters
@@ -587,8 +589,10 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
 
   // 3 MAIN EXECUTION LOOP <END>
   // =======================================
-  
-  appendStatement(forLoop,kernelBody);
+  // Now we have completed the body of the outer for loop, we can build an initialiser, 
+  // an increment and a test statement. The we insert this loop into the __gloabl__ function.
+  // Because threadIdx.x etc are not really variables, we invent "opaque" variables with these
+  // names.
   
   postKernelGlobalDataHandling(fn, pl);
 

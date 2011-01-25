@@ -543,11 +543,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
     }
   }
 
-  
-  // 2 HANDLE GLOBAL DATA <TRANSFER TO DEVICE>
-  // =======================================
   preKernelGlobalDataHandling(fn, pl);
-
 
   // 3 MAIN EXECUTION LOOP <BEGIN>
   // =======================================
@@ -593,14 +589,9 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // names.
   appendStatement(forLoop,kernelBody);
   
-
-  // 4 HANDLE GLOBAL DATA <TRANSFER FROM DEVICE>
-  // =======================================
   postKernelGlobalDataHandling(fn, pl);
 
-  // -----------------------------------------------------------------------------------------------
-  // Reductions require additional kernel launch - create that definition
-  if(reduction_required)
+  if (reduction_required)
   {
     generateReductionKernel(kernel_name, pl);
   }
@@ -608,7 +599,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   generateSpecialStub(fn, kernel_name, pl);
 }
 
-void OPParLoop::generateReductionKernel(string kernel_name, op_par_loop_args *pl)
+SgFunctionParameterList* OPParLoop::createReductionParameters(op_par_loop_args *pl)
 {
   SgFunctionParameterList *paramList = buildFunctionParameterList();
   SgInitializedName *grid_size = buildInitializedName("gridsize", buildIntType());
@@ -626,6 +617,14 @@ void OPParLoop::generateReductionKernel(string kernel_name, op_par_loop_args *pl
     }
   }
 
+  return paramList;
+}
+
+
+void OPParLoop::generateReductionKernel(string kernel_name, op_par_loop_args *pl)
+{
+  SgFunctionParameterList *paramList = createReductionParameters(pl);
+ 
   createReductionKernel(kernel_name, paramList);
 
   for(int i=0; i<pl->numArgs(); i++)
@@ -1500,6 +1499,7 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
 
 void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl)
 {
+  // HANDLE GLOBAL DATA <TRANSFER TO DEVICE>
   for(int i=0; i<pl->numArgs(); i++)
   {
     SgStatement *viInit = buildVariableDeclaration(SgName("d"), buildIntType(), buildAssignInitializer(buildIntVal(0)));
@@ -1534,6 +1534,7 @@ void OPParLoop::preKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_a
 
 void OPParLoop::postKernelGlobalDataHandling(SgFunctionCallExp *fn, op_par_loop_args *pl)
 {
+  // 4 HANDLE GLOBAL DATA <TRANSFER FROM DEVICE>
   for(int i=0; i<pl->numArgs(); i++)
   {
     if(pl->args[i]->consideredAsReduction())

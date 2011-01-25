@@ -670,15 +670,9 @@ void OPParLoop::generateReductionKernel(string kernel_name, op_par_loop_args *pl
     }
   }
 }
-  
 
-void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, op_par_loop_args *pl)
+SgFunctionParameterList* OPParLoop::buildSpecialStubParameters(op_par_loop_args *pl)
 {
-  // The following code builds the stub function. A little of the code that is output by
-  // op2.m is not generated here, simply as it is not necessary and I was running out of
-  // time before the meeting on 27 Jan. (cudaThreadSynchronize and cudaGetLastError, and
-  // some debugging statements are missing, but would be trivial to add).
-  // As usual we build a list of parameters for the function.
   SgFunctionParameterList *paramList = buildFunctionParameterList();
   SgInitializedName *name = buildInitializedName(SgName("name"), buildPointerType(buildConstType(buildCharType())));
   appendArg(paramList, name);
@@ -696,7 +690,13 @@ void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, o
     name = buildInitializedName(SgName("acc"+buildStr(i)), op_access);
     appendArg(paramList, name);
   }
+  
+  return paramList;
+}
 
+void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, op_par_loop_args *pl)
+{
+  SgFunctionParameterList *paramList = buildSpecialStubParameters(pl);
   createStub(kernel_name, paramList);
 
   // Declare gridsize and bsize
@@ -745,21 +745,7 @@ void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, o
   // If we have reduction operations it requires a second kernel launch (gridsize = 1, blocksize = 1)
   if(reduction_required)
   {
-    kPars = buildExprListExp();
-    kPars->append_expression(buildOpaqueVarRefExp(SgName("gridsize")));
-    for(int i=0; i<pl->numArgs(); i++)
-    {
-      if(pl->args[i]->consideredAsReduction())
-      {
-        SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(i)+"->dat_d"));
-        SgCastExp* e_cast = buildCastExp(e, buildPointerType(pl->args[i]->type));
-        kPars->append_expression(e_cast);
-
-        kPars->append_expression(buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
-      }
-    }
-    kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"_reduction<<<1,1,reduct_shared>>>", buildVoidType(), kPars, stubBody);
-    appendStatement(kCall,stubBody);
+    createReductionKernelCall(kernel_name, pl);
   }
 
   createEndTimerBlock(stubBody, false);
@@ -771,6 +757,24 @@ void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, o
   
 }
 
+void OPParLoop::createReductionKernelCall(string kernel_name, op_par_loop_args *pl)
+{
+  SgExprListExp *kPars = buildExprListExp();
+  kPars->append_expression(buildOpaqueVarRefExp(SgName("gridsize")));
+  for(int i=0; i<pl->numArgs(); i++)
+  {
+    if(pl->args[i]->consideredAsReduction())
+    {
+      SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(i)+"->dat_d"));
+      SgCastExp* e_cast = buildCastExp(e, buildPointerType(pl->args[i]->type));
+      kPars->append_expression(e_cast);
+
+      kPars->append_expression(buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i))));
+    }
+  }
+  SgExprStatement *kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"_reduction<<<1,1,reduct_shared>>>", buildVoidType(), kPars, stubBody);
+  appendStatement(kCall,stubBody);
+}
 
 /*
  *  Generate Seperate File For the Standard Kernel

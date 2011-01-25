@@ -598,80 +598,80 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // =======================================
   postKernelGlobalDataHandling(fn, pl);
 
-
-  // 1 FUNCTION DEFINITION <END>
-  // =======================================  
-
-
-
   // -----------------------------------------------------------------------------------------------
   // Reductions require additional kernel launch - create that definition
   if(reduction_required)
   {
-    paramList = buildFunctionParameterList();
-    SgInitializedName *grid_size = buildInitializedName("gridsize", buildIntType());
-    appendArg(paramList, grid_size);
-    for(int i=0; i<pl->numArgs(); i++)
-    {
-      if(pl->args[i]->consideredAsReduction())
-      {
-        SgType *argType = buildPointerType(pl->args[i]->type);
-        SgInitializedName *name = buildInitializedName(arg(i), argType);
-        paramList->append_arg(name);
-
-        SgInitializedName *block_reduct = buildInitializedName("block_reduct" + buildStr(i), buildPointerType(buildVoidType()));
-        appendArg(paramList, block_reduct);
-      }
-    }
-
-    createReductionKernel(kernel_name, paramList);
-
-    for(int i=0; i<pl->numArgs(); i++)
-    {
-      if(pl->args[i]->consideredAsReduction())
-      {
-        // Create loop
-        SgStatement *viInit = buildVariableDeclaration(SgName("d"), buildIntType(), buildAssignInitializer(buildIntVal(0)));
-        SgName indVar = isSgVariableDeclaration(viInit)->get_definition()->get_vardefn()->get_name();
-              
-        // Call function
-        SgExprListExp *kPars2 = buildExprListExp();
-        SgExpression *e = buildOpaqueVarRefExp(arg(i));
-        e = buildAddOp(e, buildVarRefExp(indVar));
-        kPars2->append_expression(e);
-        e = buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i)));
-        kPars2->append_expression(e);
-        e = buildOpaqueVarRefExp(SgName("gridsize"));
-        kPars2->append_expression(e);
-
-        SgExprStatement *uf1 = NULL;
-        switch(pl->args[i]->access)
-        {
-          case OP_INC:
-            uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_INC>"), buildVoidType(), kPars2);
-            break;
-          case OP_MAX:
-            uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_MAX>"), buildVoidType(), kPars2);
-            break;
-          case OP_MIN:
-            uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_MIN>"), buildVoidType(), kPars2);
-            break;
-          default:
-            break;
-        }
-
-        // build test and increment, and add the loop into the body of the inner loop.
-        SgScopeStatement *viLoopBody = buildBasicBlock(uf1);
-        SgExprStatement *viTest = buildExprStatement(buildLessThanOp(buildOpaqueVarRefExp(indVar), buildIntVal(pl->args[i]->dim)));
-        SgPlusPlusOp *viIncrement = buildPlusPlusOp(buildOpaqueVarRefExp(indVar));
-        SgStatement *viForLoop = buildForStatement(viInit, viTest, viIncrement, viLoopBody);
-        appendStatement(viForLoop,reductionBody);
-      }
-    }
+    generateReductionKernel(kernel_name, pl);
   }
-  
+
   generateSpecialStub(fn, kernel_name, pl);
 }
+
+void OPParLoop::generateReductionKernel(string kernel_name, op_par_loop_args *pl)
+{
+  SgFunctionParameterList *paramList = buildFunctionParameterList();
+  SgInitializedName *grid_size = buildInitializedName("gridsize", buildIntType());
+  appendArg(paramList, grid_size);
+  for(int i=0; i<pl->numArgs(); i++)
+  {
+    if(pl->args[i]->consideredAsReduction())
+    {
+      SgType *argType = buildPointerType(pl->args[i]->type);
+      SgInitializedName *name = buildInitializedName(arg(i), argType);
+      paramList->append_arg(name);
+
+      SgInitializedName *block_reduct = buildInitializedName("block_reduct" + buildStr(i), buildPointerType(buildVoidType()));
+      appendArg(paramList, block_reduct);
+    }
+  }
+
+  createReductionKernel(kernel_name, paramList);
+
+  for(int i=0; i<pl->numArgs(); i++)
+  {
+    if(pl->args[i]->consideredAsReduction())
+    {
+      // Create loop
+      SgStatement *viInit = buildVariableDeclaration(SgName("d"), buildIntType(), buildAssignInitializer(buildIntVal(0)));
+      SgName indVar = isSgVariableDeclaration(viInit)->get_definition()->get_vardefn()->get_name();
+	    
+      // Call function
+      SgExprListExp *kPars2 = buildExprListExp();
+      SgExpression *e = buildOpaqueVarRefExp(arg(i));
+      e = buildAddOp(e, buildVarRefExp(indVar));
+      kPars2->append_expression(e);
+      e = buildOpaqueVarRefExp(SgName("block_reduct" + buildStr(i)));
+      kPars2->append_expression(e);
+      e = buildOpaqueVarRefExp(SgName("gridsize"));
+      kPars2->append_expression(e);
+
+      SgExprStatement *uf1 = NULL;
+      switch(pl->args[i]->access)
+      {
+	case OP_INC:
+	  uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_INC>"), buildVoidType(), kPars2);
+	  break;
+	case OP_MAX:
+	  uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_MAX>"), buildVoidType(), kPars2);
+	  break;
+	case OP_MIN:
+	  uf1 = buildFunctionCallStmt(SgName("op_reduction2_2<OP_MIN>"), buildVoidType(), kPars2);
+	  break;
+	default:
+	  break;
+      }
+
+      // build test and increment, and add the loop into the body of the inner loop.
+      SgScopeStatement *viLoopBody = buildBasicBlock(uf1);
+      SgExprStatement *viTest = buildExprStatement(buildLessThanOp(buildOpaqueVarRefExp(indVar), buildIntVal(pl->args[i]->dim)));
+      SgPlusPlusOp *viIncrement = buildPlusPlusOp(buildOpaqueVarRefExp(indVar));
+      SgStatement *viForLoop = buildForStatement(viInit, viTest, viIncrement, viLoopBody);
+      appendStatement(viForLoop,reductionBody);
+    }
+  }
+}
+  
 
 void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, op_par_loop_args *pl)
 {

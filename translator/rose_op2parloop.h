@@ -120,6 +120,8 @@ class OPParLoop : public AstSimpleProcessing
     SgFunctionParameterList* createSpecialParameters(op_par_loop_args *pl);
     SgFunctionParameterList* createStandardParameters(op_par_loop_args *pl);
     void createSharedVariableDeclarations(op_par_loop_args *pl);
+    void generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, op_par_loop_args *pl);
+    void generateStandardStub(SgFunctionCallExp *fn, string kernel_name, op_par_loop_args *pl);
 };
 
 #endif

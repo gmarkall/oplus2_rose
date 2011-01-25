@@ -670,13 +670,17 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
     }
   }
   
+  generateSpecialStub(fn, kernel_name, pl);
+}
 
+void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, op_par_loop_args *pl)
+{
   // The following code builds the stub function. A little of the code that is output by
   // op2.m is not generated here, simply as it is not necessary and I was running out of
   // time before the meeting on 27 Jan. (cudaThreadSynchronize and cudaGetLastError, and
   // some debugging statements are missing, but would be trivial to add).
   // As usual we build a list of parameters for the function.
-  paramList = buildFunctionParameterList();
+  SgFunctionParameterList *paramList = buildFunctionParameterList();
   SgInitializedName *name = buildInitializedName(SgName("name"), buildPointerType(buildConstType(buildCharType())));
   appendArg(paramList, name);
   name = buildInitializedName(SgName("set"), op_set);
@@ -715,7 +719,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // To add a call to the CUDA function, we need to build a list of parameters that
   // we pass to it. The easiest way to do this is to name the members of the 
   // struct to which they belong, but this is not the most elegant approach.
-  kPars = buildExprListExp();
+  SgExprListExp *kPars = buildExprListExp();
   for(int i=0; i<pl->numArgs(); i++)
   {
     SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(i)+"->dat_d"));
@@ -1279,12 +1283,15 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // Handle post global data handling
   postKernelGlobalDataHandling(fn, pl);
 
-  // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-  
+  generateStandardStub(fn, kernel_name, pl);
+}
+
+void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, op_par_loop_args *pl)
+{
   // The following code builds the stub function.
 
   // As usual we build a list of parameters for the function.
-  paramList = buildFunctionParameterList();
+  SgFunctionParameterList *paramList = buildFunctionParameterList();
   SgInitializedName *name = buildInitializedName(SgName("name"), buildPointerType(buildConstType(buildCharType())));
   appendArg(paramList, name);
   name = buildInitializedName(SgName("set"), op_set);
@@ -1307,7 +1314,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // Add variables nargs and 'ninds'
   //Example : int nargs = 3, ninds = 2;
   
-  varDec = buildVariableDeclaration(SgName("nargs"), buildIntType(), buildAssignInitializer(buildIntVal(pl->numArgs())), stubBody);
+  SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("nargs"), buildIntType(), buildAssignInitializer(buildIntVal(pl->numArgs())), stubBody);
   appendStatement(varDec,stubBody);
   varDec = buildVariableDeclaration(SgName("ninds"), buildIntType(), buildAssignInitializer(buildIntVal(pl->planContainer.size())), stubBody);
   appendStatement(varDec,stubBody);
@@ -1412,7 +1419,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // To add a call to the CUDA function, we need to build a list of parameters that
   // we pass to it. The easiest way to do this is to name the members of the 
   // struct to which they belong, but this is not the most elegant approach.
-  kPars = buildExprListExp();
+  SgExprListExp *kPars = buildExprListExp();
   {
     // First Assemble all expressions using plan container <for arguments with indirection>
     for(unsigned int i=0; i<pl->planContainer.size(); i++)
@@ -1462,7 +1469,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // We have to add the kernel configuration as part of the function name
   // as CUDA is not directly supported by ROSE - however, I understand
   // that CUDA and OpenCL support is coming soon!
-  kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<nblocks,BSIZE,nshared>>>", buildVoidType(), kPars, stubBody);
+  SgExprStatement *kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<nblocks,BSIZE,nshared>>>", buildVoidType(), kPars, stubBody);
   appendStatement(kCall,blockLoopBody);
 
   createEndTimerBlock(blockLoopBody, true);

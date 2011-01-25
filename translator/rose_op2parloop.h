@@ -126,6 +126,7 @@ class OPParLoop : public AstSimpleProcessing
     void createReductionKernelCall(string kernel_name, op_par_loop_args *pl);
     void createSpecialKernelCall(string kernel_name, op_par_loop_args *pl);
     void createSpecialStubVariables();
+    void createSpecialKernelVariables(op_par_loop_args *pl);
 };
 
 #endif

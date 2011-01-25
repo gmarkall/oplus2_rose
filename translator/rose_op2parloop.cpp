@@ -40,19 +40,19 @@ const int op_par_loop_args::num_params = 2;
 
 /////////// Utility string functions for creating argument names ///////////////
 
-inline string buildStr(int i)
+string buildStr(int i)
 {
   stringstream s;
   s << i;
   return s.str();
 }
 
-inline string arg(int i)
+string arg(int i)
 {
   return "arg"+buildStr(i);
 }
 
-inline string argLocal(int i)
+string argLocal(int i)
 {
   return arg(i)+"_l";
 }
@@ -517,6 +517,19 @@ void OPParLoop::createSharedVariableDeclarations(op_par_loop_args *pl)
   createSharedVariable("nelem", buildIntType(), kernelBody);
 }
 
+void OPParLoop::createSpecialKernelVariables(op_par_loop_args *pl)
+{  
+  for(int i=0; i<pl->numArgs(); i++)
+  {
+    if(pl->args[i]->isGlobal())
+    {
+      SgVariableDeclaration *varDec;
+      varDec = buildVariableDeclaration(argLocal(i), buildArrayType(pl->args[i]->type, buildIntVal(pl->args[i]->dim)), NULL, kernelBody);
+      appendStatement(varDec,kernelBody);
+    }
+  }
+}
+
 /*
  *  Generate Seperate File For the Special Kernel
  *  ---------------------------------------------
@@ -532,16 +545,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
  
   createKernel(kernel_name, paramList);
 
-  // We Add the declarations of local variables first.
-  for(int i=0; i<pl->numArgs(); i++)
-  {
-    if(pl->args[i]->isGlobal())
-    {
-      SgVariableDeclaration *varDec;
-      varDec = buildVariableDeclaration(argLocal(i), buildArrayType(pl->args[i]->type, buildIntVal(pl->args[i]->dim)), NULL, kernelBody);
-      appendStatement(varDec,kernelBody);
-    }
-  }
+  createSpecialKernelVariables(pl);
 
   preKernelGlobalDataHandling(fn, pl);
 
@@ -583,10 +587,7 @@ void OPParLoop::generateSpecial(SgFunctionCallExp *fn, op_par_loop_args *pl)
 
   // 3 MAIN EXECUTION LOOP <END>
   // =======================================
-  // Now we have completed the body of the outer for loop, we can build an initialiser, 
-  // an increment and a test statement. The we insert this loop into the __gloabl__ function.
-  // Because threadIdx.x etc are not really variables, we invent "opaque" variables with these
-  // names.
+  
   appendStatement(forLoop,kernelBody);
   
   postKernelGlobalDataHandling(fn, pl);

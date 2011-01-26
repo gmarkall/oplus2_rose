@@ -135,6 +135,7 @@ class OPParLoop : public AstSimpleProcessing
     void createSyncthreadsCall();
     void createCopyToShared(op_par_loop_args *pl);
     void createCopyFromShared(op_par_loop_args *pl);
+    void createInitialiseLocalVariables(op_par_loop_args *pl, SgScopeStatement *scope);
 };
 
 #endif

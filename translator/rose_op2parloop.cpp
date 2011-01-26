@@ -1000,6 +1000,26 @@ void OPParLoop::createCopyToShared(op_par_loop_args *pl)
   }
 }
 
+void OPParLoop::createInitialiseLocalVariables(op_par_loop_args *pl, SgScopeStatement *scope)
+{
+  for(int i=0; i<pl->numArgs(); i++)
+  {
+    if(pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC && pl->args[i]->usesIndirection())
+    {
+      for(int j=0; j<pl->args[i]->dim; j++)
+      {
+        // If uses indirection
+        SgExpression* exprDst = buildOpaqueVarRefExp(argLocal(i) + SgName("["+buildStr(j)+"]"));
+        SgExpression* exprSrc = buildIntVal(0);
+      
+        // Append statement to the inner loop body
+        appendStatement(buildExprStatement( buildAssignOp( exprDst,exprSrc ) ), scope);
+      }
+    }
+  }
+
+}
+
 /*
  *  Generate Seperate File For the Standard Kernel
  *  ----------------------------------------------
@@ -1044,23 +1064,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   SgExprStatement *condStmt2 = buildExprStatement( buildLessThanOp( buildVarRefExp(mainLoopVar), buildVarRefExp(SgName("nelem")) ) );
   SgIfStmt* cond2 = buildIfStmt(condStmt2, condBody2, NULL);
   
-  // Part 2_1: Initialize Local Variables
-  for(int i=0; i<pl->numArgs(); i++)
-  {
-    if(pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC && pl->args[i]->usesIndirection())
-    {
-      for(int j=0; j<pl->args[i]->dim; j++)
-      {
-        // If uses indirection
-        SgExpression* exprDst = buildOpaqueVarRefExp(argLocal(i) + SgName("["+buildStr(j)+"]"));
-        SgExpression* exprSrc = buildIntVal(0);
-      
-        // Append statement to the inner loop body
-        appendStatement(buildExprStatement( buildAssignOp( exprDst,exprSrc ) ), condBody2);
-      }
-    }
-  }
-
+  createInitialiseLocalVariables(pl, condBody2);
+  
   // Part 2_1_2: Load directly accessed global memory data into local variables i.e. registers
   for(int i=0; i<pl->numArgs(); i++)
   {
@@ -1138,8 +1143,6 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
       {
         for(int j=0; j<pl->args[i]->dim; j++)
         {
-          // (Example? old note? to be deleted?) arg4_l[0] = *(arg4 + n * 4 + 0);
-        
           SgExpression* lhs1 = buildMultiplyOp( buildOpaqueVarRefExp(SgName("n")), buildIntVal(pl->args[i]->dim) );
           lhs1 = buildAddOp(lhs1, buildIntVal(j));
           lhs1 = buildAddOp(buildOpaqueVarRefExp(arg(i)), lhs1);
@@ -1168,8 +1171,9 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   // ========================================================
   
   // Part 3: Inside the main outer loop body - the third part, copying values from arg to shared memory
-  bool brequired = false;
+  bool brequired = false; // What does brequired mean?!
   for(int i=0; i<pl->numArgs(); i++) {
+      // If there's an argument that's not a global variable but indirectly accessed and is incremented, then 
       if(pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC && pl->args[i]->usesIndirection()) {
         brequired = true;
       }
@@ -1245,11 +1249,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   SgStatement *mainForLoop = buildForStatement(mainLoopInit, mainLoopTest, mainLoopIncrement, mainLoopBody);
   appendStatement(mainForLoop, kernelBody);
   
-  
-
   // 8. COPY DATA BACK TO DRAM
   createCopyFromShared(pl);
-
 
   // Handle post global data handling
   postKernelGlobalDataHandling(fn, pl);

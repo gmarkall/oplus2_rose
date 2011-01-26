@@ -1248,8 +1248,17 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   
 
   // 8. COPY DATA BACK TO DRAM
-  // ========================================================
+  createCopyFromShared(pl);
 
+
+  // Handle post global data handling
+  postKernelGlobalDataHandling(fn, pl);
+
+  generateStandardStub(fn, kernel_name, pl);
+}
+
+void OPParLoop::createCopyFromShared(op_par_loop_args *pl)
+{
   // For write and icrement
   // Copy indirect datasets into shared memory or zero increment
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
@@ -1281,7 +1290,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
         {
           SgExpression* rhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("_s[" + buildStr(j) + "+n*" + buildStr(pl->planContainer[i]->dim) + "]"));
           SgExpression* lhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("[" + buildStr(j) + "+ind_index*" + buildStr(pl->planContainer[i]->dim) + "]"));
-          expression = buildAssignOp( lhs, rhs );
+          SgExpression *expression = buildAssignOp( lhs, rhs );
           switch(pl->planContainer[i]->access)
           {
           case OP_RW:
@@ -1299,19 +1308,15 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
       }
       else
       {
-        SgExpression* rhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("_s[n*" + buildStr(pl->planContainer[i]->dim) + "]"));
-        SgExpression* lhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("[ind_" + arg(i) + "_ptr[n]*" + buildStr(pl->planContainer[i]->dim) + "]"));
-        expression = buildAssignOp( lhs, rhs );
+        SgExpression *rhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("_s[n*" + buildStr(pl->planContainer[i]->dim) + "]"));
+        SgExpression *lhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("[ind_" + arg(i) + "_ptr[n]*" + buildStr(pl->planContainer[i]->dim) + "]"));
+        SgExpression *expression = buildAssignOp( lhs, rhs );
         appendStatement(buildExprStatement(expression), loopBody);
       }
       // Append outer loop to the main body
       appendStatement(loopForLoop, kernelBody);
   }
 
-  // Handle post global data handling
-  postKernelGlobalDataHandling(fn, pl);
-
-  generateStandardStub(fn, kernel_name, pl);
 }
 
 void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, op_par_loop_args *pl)

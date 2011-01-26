@@ -134,6 +134,7 @@ class OPParLoop : public AstSimpleProcessing
     void createSharedVariableOffsetInitialiser(op_par_loop_args *pl);
     void createSyncthreadsCall();
     void createCopyToShared(op_par_loop_args *pl);
+    void createCopyFromShared(op_par_loop_args *pl);
 };
 
 #endif

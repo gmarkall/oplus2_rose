@@ -811,28 +811,8 @@ void OPParLoop::createStandardKernelVariables(op_par_loop_args *pl)
   }
 }
 
-
-/*
- *  Generate Seperate File For the Standard Kernel
- *  ----------------------------------------------
- */ 
-void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
+void OPParLoop::createSharedVariableOffsetInitialiser(op_par_loop_args *pl)
 {
-  string kernel_name = getName(pl->kernel);
-  createKernelFile(kernel_name);
-  
-  initialiseDataTypes();
- 
-  SgFunctionParameterList *paramList = createStandardParameters(pl);
-  createKernel(kernel_name, paramList);
-
-  // 2. ADD DECLARATION OF LOCAL VARIABLES
-  createStandardKernelVariables(pl);
-  createSharedVariableDeclarations(pl);
-  
-  // 4.1 GET SIZES AND SHIFT POINTERS AND DIRECT MAPPED DATA
-  // ========================================================
-
   // We put this part within an IF condition, so that threadIdx.x == 0 performs this
   SgScopeStatement *ifBody = buildBasicBlock();
   SgExprStatement *conditionStmt = buildExprStatement( buildEqualityOp( buildOpaqueVarRefExp(SgName("threadIdx.x")), buildIntVal(0) ) );
@@ -935,6 +915,26 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
     appendStatement(buildExprStatement(expression), ifBody);
   }
   appendStatement(threadCondition, kernelBody);
+}
+
+/*
+ *  Generate Seperate File For the Standard Kernel
+ *  ----------------------------------------------
+ */ 
+void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
+{
+  string kernel_name = getName(pl->kernel);
+  createKernelFile(kernel_name);
+  
+  initialiseDataTypes();
+ 
+  SgFunctionParameterList *paramList = createStandardParameters(pl);
+  createKernel(kernel_name, paramList);
+
+  // 2. ADD DECLARATION OF LOCAL VARIABLES
+  createStandardKernelVariables(pl);
+  createSharedVariableDeclarations(pl);
+  createSharedVariableOffsetInitialiser(pl);
 
   // 4.2 CALL SYNCTHREADS
   // ========================================================
@@ -986,7 +986,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
           default:
             break;
         }
-        expression = buildAssignOp( buildOpaqueVarRefExp(indrvar), asgnExpr );
+        SgExpression *expression = buildAssignOp( buildOpaqueVarRefExp(indrvar), asgnExpr );
         appendStatement(buildExprStatement(expression), loopBody);
       }
     }
@@ -1010,7 +1010,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
         default:
           break;
       }
-      expression = buildAssignOp( buildOpaqueVarRefExp(indrvar), asgnExpr );
+      SgExpression *expression = buildAssignOp( buildOpaqueVarRefExp(indrvar), asgnExpr );
       appendStatement(buildExprStatement(expression), loopBody);
     }
     // Append outer loop
@@ -1033,7 +1033,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   SgName mainLoopVar = isSgVariableDeclaration(mainLoopInit)->get_definition()->get_vardefn()->get_name();
 
   // Part 1: Inside the main outer loop body - the first part, defining col2
-  varDec = buildVariableDeclaration(SgName("col2"), buildIntType(), buildAssignInitializer(buildIntVal(-1)), mainLoopBody);
+  SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("col2"), buildIntType(), buildAssignInitializer(buildIntVal(-1)), mainLoopBody);
   SgName color2 = isSgVariableDeclaration(varDec)->get_definition()->get_vardefn()->get_name();
   appendStatement(varDec, mainLoopBody);
 
@@ -1093,12 +1093,12 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
     {
       if(pl->args[i]->consideredAsReduction())
       {
-        expression = buildOpaqueVarRefExp(SgName(arg(i) + "_l"));
+        SgExpression *expression = buildOpaqueVarRefExp(SgName(arg(i) + "_l"));
         kPars->append_expression(expression);
       }
       else if(pl->args[i]->consideredAsConst())
       {
-        expression = buildOpaqueVarRefExp(SgName(arg(i)));
+        SgExpression *expression = buildOpaqueVarRefExp(SgName(arg(i)));
         kPars->append_expression(expression);
       }
     }
@@ -1108,12 +1108,12 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
       {
         if(pl->args[i]->access == OP_INC)
         {
-          expression = buildOpaqueVarRefExp(SgName(arg(i) + "_l"));
+          SgExpression *expression = buildOpaqueVarRefExp(SgName(arg(i) + "_l"));
           kPars->append_expression(expression);
         }
         else
         {
-          expression = buildMultiplyOp(buildOpaqueVarRefExp(SgName(arg(i)+"_ptr[n]")), buildIntVal(pl->args[i]->dim));
+          SgExpression *expression = buildMultiplyOp(buildOpaqueVarRefExp(SgName(arg(i)+"_ptr[n]")), buildIntVal(pl->args[i]->dim));
           expression = buildAddOp(buildOpaqueVarRefExp(SgName("ind_" + arg(pl->args[i]->plan_index) + "_s")), expression);
           kPars->append_expression(expression);
         }
@@ -1154,7 +1154,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   }
   
   // Part 2_3: Set the color of the thread
-  expression = buildAssignOp( buildOpaqueVarRefExp(color2), buildOpaqueVarRefExp(SgName("color[") +  mainLoopVar + SgName("]")) );
+  SgExpression *expression = buildAssignOp( buildOpaqueVarRefExp(color2), buildOpaqueVarRefExp(SgName("color[") +  mainLoopVar + SgName("]")) );
   SgStatement* expr_statement = buildExprStatement(expression);
   appendStatement(expr_statement, condBody2);
 

@@ -132,6 +132,8 @@ class OPParLoop : public AstSimpleProcessing
     SgName createSpecialKernelLoopConstruct(string kernel_name, op_par_loop_args* pl, SgScopeStatement* loopBody);
     void createSpecialKernelExecutionLoop(string kernel_name, op_par_loop_args *pl);
     void createSharedVariableOffsetInitialiser(op_par_loop_args *pl);
+    void createSyncthreadsCall();
+    void createCopyToShared(op_par_loop_args *pl);
 };
 
 #endif

@@ -917,32 +917,14 @@ void OPParLoop::createSharedVariableOffsetInitialiser(op_par_loop_args *pl)
   appendStatement(threadCondition, kernelBody);
 }
 
-/*
- *  Generate Seperate File For the Standard Kernel
- *  ----------------------------------------------
- */ 
-void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
+void OPParLoop::createSyncthreadsCall()
 {
-  string kernel_name = getName(pl->kernel);
-  createKernelFile(kernel_name);
-  
-  initialiseDataTypes();
- 
-  SgFunctionParameterList *paramList = createStandardParameters(pl);
-  createKernel(kernel_name, paramList);
-
-  // 2. ADD DECLARATION OF LOCAL VARIABLES
-  createStandardKernelVariables(pl);
-  createSharedVariableDeclarations(pl);
-  createSharedVariableOffsetInitialiser(pl);
-
-  // 4.2 CALL SYNCTHREADS
-  // ========================================================
   SgExprStatement *kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, kernelBody);
   appendStatement(kCall, kernelBody);
+}
 
-  // 4.3 COPY INDIRECT DATA SETS INTO SHARED MEMORY
-  // ========================================================
+void OPParLoop::createCopyToShared(op_par_loop_args *pl)
+{
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
   {
     // Create outer loop
@@ -1016,11 +998,31 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
     // Append outer loop
     appendStatement(loopForLoop, kernelBody);
   }
+}
 
-  // 4.4 CALL SYNCTHREADS
-  // ========================================================
-  kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, kernelBody);
-  appendStatement(kCall, kernelBody);
+/*
+ *  Generate Seperate File For the Standard Kernel
+ *  ----------------------------------------------
+ */ 
+void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
+{
+  string kernel_name = getName(pl->kernel);
+  createKernelFile(kernel_name);
+  
+  initialiseDataTypes();
+ 
+  SgFunctionParameterList *paramList = createStandardParameters(pl);
+  createKernel(kernel_name, paramList);
+
+  // 2. ADD DECLARATION OF LOCAL VARIABLES
+  createStandardKernelVariables(pl);
+  createSharedVariableDeclarations(pl);
+  createSharedVariableOffsetInitialiser(pl);
+  createSyncthreadsCall();
+
+  // 4.3 COPY INDIRECT DATA SETS INTO SHARED MEMORY
+  createCopyToShared(pl);
+  createSyncthreadsCall();
     
   // 5. PRE-KERNEL HEADER
   // ========================================================
@@ -1230,7 +1232,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
     // Append condition statement to outer loop body
     appendStatement(cond, loopBody);
     // Create syncfunction statement
-    kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, kernelBody);
+    SgExprStatement *kCall = buildFunctionCallStmt("__syncthreads", buildVoidType(), NULL, kernelBody);
     // Append syncthreads
     appendStatement(kCall, loopBody);
     // Append outer loop to the main body

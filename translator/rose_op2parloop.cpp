@@ -7,7 +7,7 @@
  * are permitted provided that the following conditions are met:
  * 
  *     * Redistributions of source code must retain the above copyright notice,
- *      this list of conditions and the following disclaimer.
+ *       this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright notice,
  *       this list of conditions and the following disclaimer in the documentation
  *       and/or other materials provided with the distribution.
@@ -796,6 +796,22 @@ void OPParLoop::createReductionKernelCall(string kernel_name, op_par_loop_args *
   appendStatement(kCall,stubBody);
 }
 
+void OPParLoop::createStandardKernelVariables(op_par_loop_args *pl)
+{
+  // Declarations of local variables are only require for INC, according to an older comment.
+  // It seems that they're also required for directly-accessed variables.
+  for(int i=0; i<pl->numArgs(); i++)
+  {
+    if((pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC) || (pl->args[i]->isNotGlobal() && !pl->args[i]->usesIndirection()))
+    {
+      SgType *argType = pl->args[i]->type;
+      SgVariableDeclaration *varDec = buildVariableDeclaration(argLocal(i), buildArrayType(argType, buildIntVal(pl->args[i]->dim)), NULL, kernelBody);
+      appendStatement(varDec,kernelBody);
+    }
+  }
+}
+
+
 /*
  *  Generate Seperate File For the Standard Kernel
  *  ----------------------------------------------
@@ -808,23 +824,10 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   initialiseDataTypes();
  
   SgFunctionParameterList *paramList = createStandardParameters(pl);
-
   createKernel(kernel_name, paramList);
 
   // 2. ADD DECLARATION OF LOCAL VARIABLES
-  // ===============================================
-
-  // We Add the declarations of local variables first, required only for INC
-  for(int i=0; i<pl->numArgs(); i++)
-  {
-    if((pl->args[i]->isNotGlobal() && pl->args[i]->access == OP_INC) || (pl->args[i]->isNotGlobal() && !pl->args[i]->usesIndirection()))
-    {
-      SgType *argType = pl->args[i]->type;
-      SgVariableDeclaration *varDec = buildVariableDeclaration(argLocal(i), buildArrayType(argType, buildIntVal(pl->args[i]->dim)), NULL, kernelBody);
-      appendStatement(varDec,kernelBody);
-    }
-  }
-
+  createStandardKernelVariables(pl);
   createSharedVariableDeclarations(pl);
   
   // 4.1 GET SIZES AND SHIFT POINTERS AND DIRECT MAPPED DATA

@@ -1020,6 +1020,33 @@ void OPParLoop::createInitialiseLocalVariables(op_par_loop_args *pl, SgScopeStat
 
 }
 
+void OPParLoop::createLoadDataToLocalVariables(op_par_loop_args *pl, SgScopeStatement *scope)
+{
+  // Part 2_1_2: Load directly accessed global memory data into local variables i.e. registers
+  for(int i=0; i<pl->numArgs(); i++)
+  {
+    if(pl->args[i]->isNotGlobal() && !pl->args[i]->usesIndirection())
+    {
+      if(pl->args[i]->access == OP_READ || pl->args[i]->access == OP_RW)
+      {
+        for(int j=0; j<pl->args[i]->dim; j++)
+        {
+          SgExpression* lhs1 = buildMultiplyOp( buildOpaqueVarRefExp(SgName("n")), buildIntVal(pl->args[i]->dim) );
+          lhs1 = buildAddOp(lhs1, buildIntVal(j));
+          lhs1 = buildAddOp(buildOpaqueVarRefExp(arg(i)), lhs1);
+          lhs1 = buildPointerDerefExp(lhs1);
+
+          SgExpression* rhs1 = buildOpaqueVarRefExp(argLocal(i) + SgName("[" + buildStr(j) + "]"));
+          rhs1 = buildAssignOp(rhs1, lhs1);      
+
+          SgStatement* expr_statement = buildExprStatement(rhs1);
+          appendStatement(expr_statement, scope);
+        }
+      }
+    }
+  } 
+}
+
 /*
  *  Generate Seperate File For the Standard Kernel
  *  ----------------------------------------------
@@ -1065,32 +1092,8 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   SgIfStmt* cond2 = buildIfStmt(condStmt2, condBody2, NULL);
   
   createInitialiseLocalVariables(pl, condBody2);
-  
-  // Part 2_1_2: Load directly accessed global memory data into local variables i.e. registers
-  for(int i=0; i<pl->numArgs(); i++)
-  {
-    if(pl->args[i]->isNotGlobal() && !pl->args[i]->usesIndirection())
-    {
-      if(pl->args[i]->access == OP_READ || pl->args[i]->access == OP_RW)
-      {
-        for(int j=0; j<pl->args[i]->dim; j++)
-        {
-          // (Example? old note? to be deleted?) arg4_l[0] = *(arg4 + n * 4 + 0);
-        
-          SgExpression* lhs1 = buildMultiplyOp( buildOpaqueVarRefExp(SgName("n")), buildIntVal(pl->args[i]->dim) );
-          lhs1 = buildAddOp(lhs1, buildIntVal(j));
-          lhs1 = buildAddOp(buildOpaqueVarRefExp(arg(i)), lhs1);
-          lhs1 = buildPointerDerefExp(lhs1);
+  createLoadDataToLocalVariables(pl, condBody2);
 
-          SgExpression* rhs1 = buildOpaqueVarRefExp(argLocal(i) + SgName("[" + buildStr(j) + "]"));
-          rhs1 = buildAssignOp(rhs1, lhs1);      
-
-          SgStatement* expr_statement = buildExprStatement(rhs1);
-          appendStatement(expr_statement, condBody2);
-        }
-      }
-    }
-  } 
   
   // Part 2_2: Call user kernel <!!COMPLICATED!!>
   SgExprListExp *kPars = buildExprListExp();

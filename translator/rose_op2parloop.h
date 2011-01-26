@@ -137,6 +137,8 @@ class OPParLoop : public AstSimpleProcessing
     void createCopyFromShared(op_par_loop_args *pl);
     void createInitialiseLocalVariables(op_par_loop_args *pl, SgScopeStatement *scope);
     void createLoadDataToLocalVariables(op_par_loop_args *pl, SgScopeStatement *scope);
+    SgScopeStatement* createStandardKernelExecutionLoop(const SgName& mainLoopVar);
+    SgScopeStatement* createLessThanNumElemConditional(const SgName& mainLoopVar, SgScopeStatement *scope);
 };
 
 #endif

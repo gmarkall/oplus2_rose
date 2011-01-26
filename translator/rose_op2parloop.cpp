@@ -1047,6 +1047,26 @@ void OPParLoop::createLoadDataToLocalVariables(op_par_loop_args *pl, SgScopeStat
   } 
 }
 
+SgScopeStatement* OPParLoop::createStandardKernelExecutionLoop(const SgName& mainLoopVar)
+{
+  SgScopeStatement *mainLoopBody = buildBasicBlock();
+
+
+  return mainLoopBody;
+}
+
+SgScopeStatement* OPParLoop::createLessThanNumElemConditional(const SgName& mainLoopVar, SgScopeStatement *scope)
+{
+  // Part 2 <begin>: Create the if statement and do the actual calculation
+  SgScopeStatement *condBody = buildBasicBlock();        
+  SgExprStatement *condStmt = buildExprStatement( buildLessThanOp( buildVarRefExp(mainLoopVar), buildVarRefExp(SgName("nelem")) ) );
+  SgIfStmt* cond = buildIfStmt(condStmt, condBody, NULL);
+  // Part 2 <end>: Add the condition body to the main loop body
+  appendStatement(cond, scope);
+
+  return condBody;
+}
+
 /*
  *  Generate Seperate File For the Standard Kernel
  *  ----------------------------------------------
@@ -1072,24 +1092,23 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   createSyncthreadsCall();
     
   // 5. PRE-KERNEL HEADER
-  // ========================================================
   preKernelGlobalDataHandling(fn, pl);
 
-  // 6. CREATE OUTER MAIN LOOP BODY
-  // ========================================================
-  SgScopeStatement *mainLoopBody = buildBasicBlock();
-  SgStatement *mainLoopInit = buildVariableDeclaration( SgName("n"), buildIntType(), buildAssignInitializer(buildOpaqueVarRefExp(SgName("threadIdx.x"))) );
-  SgName mainLoopVar = isSgVariableDeclaration(mainLoopInit)->get_definition()->get_vardefn()->get_name();
+//////////////////////
+// trying to figure out how to split this out a bit
+//////////////////////
 
+  // 6. CREATE OUTER MAIN LOOP BODY and if statement for elem<nelem
+  SgName mainLoopVar = "n";
+  SgScopeStatement *mainLoopBody = createStandardKernelExecutionLoop(mainLoopVar);
+  
+  SgStatement *mainLoopInit = buildVariableDeclaration(mainLoopVar, buildIntType(), buildAssignInitializer(buildOpaqueVarRefExp(SgName("threadIdx.x"))) );
   // Part 1: Inside the main outer loop body - the first part, defining col2
   SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("col2"), buildIntType(), buildAssignInitializer(buildIntVal(-1)), mainLoopBody);
   SgName color2 = isSgVariableDeclaration(varDec)->get_definition()->get_vardefn()->get_name();
   appendStatement(varDec, mainLoopBody);
-
-  // Part 2 <begin>: Create the if statement and do the actual calculation
-  SgScopeStatement *condBody2 = buildBasicBlock();        
-  SgExprStatement *condStmt2 = buildExprStatement( buildLessThanOp( buildVarRefExp(mainLoopVar), buildVarRefExp(SgName("nelem")) ) );
-  SgIfStmt* cond2 = buildIfStmt(condStmt2, condBody2, NULL);
+  
+  SgScopeStatement *condBody2 = createLessThanNumElemConditional(mainLoopVar, mainLoopBody);
   
   createInitialiseLocalVariables(pl, condBody2);
   createLoadDataToLocalVariables(pl, condBody2);
@@ -1166,8 +1185,6 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
   SgStatement* expr_statement = buildExprStatement(expression);
   appendStatement(expr_statement, condBody2);
 
-  // Part 2 <end>: Add the condition body to the main loop body
-  appendStatement(cond2, mainLoopBody);
   
   
   // 7. COPY DATA BACK TO THE SHARED MEMORY

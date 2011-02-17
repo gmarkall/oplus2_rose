@@ -19,7 +19,7 @@ struct point
 	}
 };
 
-void input(int maxnode,int maxcell,int maxedge, int &nnode, int &ncell, int &nedge,
+static void input(int maxnode,int maxcell,int maxedge, int &nnode, int &ncell, int &nedge,
            float *x, float *q, int *cell, int *edge, int *ecell, int *boun) {
 
   float p,r,u,e, xt,yt;
@@ -125,7 +125,7 @@ void input(int maxnode,int maxcell,int maxedge, int &nnode, int &ncell, int &ned
 }
 
 
-void intput_partition_info(const char* number, int nnode, int ncell, int& nparts, point *partnode, point *partcell)
+static void intput_partition_info(const char* number, int nnode, int ncell, int& nparts, point *partnode, point *partcell)
 {
 	FILE *fp;
 	char file1[100];

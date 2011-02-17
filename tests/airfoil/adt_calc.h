@@ -1,4 +1,4 @@
-void adt_calc(float *x1,float *x2,float *x3,float *x4,float *q,float *adt){
+static void adt_calc(float *x1,float *x2,float *x3,float *x4,float *q,float *adt){
   float dx,dy, ri,u,v,c;
 
   ri =  1.0f/q[0];

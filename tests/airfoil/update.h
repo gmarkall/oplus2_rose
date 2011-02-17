@@ -1,5 +1,6 @@
-void update(float *qold, float *q, float *res, float *adt, float *rms){
+static void update(float *qold, float *q, float *res, float *adt, float *rms){
   float del=0.0f, adti=0.0f;
+
 
   if (*adt>0.0f) adti = 1.0f/(*adt);
 

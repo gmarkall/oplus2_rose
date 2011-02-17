@@ -145,7 +145,7 @@ void OPSource::fixOpStructs(SgNode *n)
       string class_name = initer->get_class_decl()->get_name().getString();
       if(class_name.find("op_dat") != string::npos
           || class_name.find("op_dat_gbl") != string::npos
-          || class_name.compare("_op_ptr") == 0 
+          || class_name.compare("_op_map") == 0 
           || class_name.compare("_op_set") == 0 
           || class_name.compare("_op_dat_const") == 0)
       {

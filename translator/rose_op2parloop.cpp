@@ -267,7 +267,7 @@ void OPParLoop::initialiseDataTypes()
   // loop them up before we can use them.
   op_set = lookupNamedTypeInParentScopes("op_set");
   op_dat = SgClassType::createType(buildStructDeclaration(SgName("op_dat<void>"), fileGlobalScope));
-  op_ptr = lookupNamedTypeInParentScopes("op_ptr");
+  op_map = lookupNamedTypeInParentScopes("op_map");
   op_access = lookupNamedTypeInParentScopes("op_access");
   op_plan = lookupNamedTypeInParentScopes("op_plan");
 }
@@ -696,7 +696,7 @@ SgFunctionParameterList* OPParLoop::buildSpecialStubParameters(op_par_loop_args 
     appendArg(paramList, name);
     name = buildInitializedName(SgName("idx"+buildStr(i)), buildIntType());
     appendArg(paramList, name);
-    name = buildInitializedName(SgName("ptr"+buildStr(i)), buildPointerType(op_ptr));
+    name = buildInitializedName(SgName("ptr"+buildStr(i)), buildPointerType(op_map));
     appendArg(paramList, name);
     name = buildInitializedName(SgName("acc"+buildStr(i)), op_access);
     appendArg(paramList, name);
@@ -1357,7 +1357,7 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
     appendArg(paramList, name);
     name = buildInitializedName(SgName("idx"+buildStr(i)), buildIntType());
     appendArg(paramList, name);
-    name = buildInitializedName(SgName("ptr"+buildStr(i)), buildPointerType(op_ptr));
+    name = buildInitializedName(SgName("ptr"+buildStr(i)), buildPointerType(op_map));
     appendArg(paramList, name);
     name = buildInitializedName(SgName("acc"+buildStr(i)), op_access);
     appendArg(paramList, name);
@@ -1414,7 +1414,7 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
   appendStatement(varDec,stubBody);
   varDec = buildVariableDeclaration( SgName("idxs"), buildArrayType(buildIntType(), buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_idxs), stubBody);
   appendStatement(varDec,stubBody);
-  varDec = buildVariableDeclaration( SgName("ptrs"), buildArrayType(op_ptr, buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_ptrs), stubBody);
+  varDec = buildVariableDeclaration( SgName("ptrs"), buildArrayType(op_map, buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_ptrs), stubBody);
   appendStatement(varDec,stubBody);
   varDec = buildVariableDeclaration( SgName("dims"), buildArrayType(buildIntType(), buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_dims), stubBody);
   appendStatement(varDec,stubBody);

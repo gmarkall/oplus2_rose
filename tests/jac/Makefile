@@ -1,6 +1,6 @@
 OP2ROSE := ../../translator/op2rose
 NVCC := nvcc
-NVCCFLAGS := -arch sm_13 -deviceemu
+NVCCFLAGS := -arch sm_13
 
 
 all: build

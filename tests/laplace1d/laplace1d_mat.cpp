@@ -1,5 +1,5 @@
-// test program demonstrating matrix-free spmv for FE
-// discretisation of a 1D Laplace operator in OP2
+// test program demonstrating assembly of op_sparse_matrix for FE
+// discretisation of a 1D Laplace operator and spmv
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -12,7 +12,7 @@
 
 // kernel routines for parallel loops
 
-#include "laplace.h"
+#include "laplace_mat.h"
 
 // define problem size
 
@@ -57,11 +57,17 @@ int main(int argc, char **argv){
   op_dat<float> y(nodes, 1, p_y);
   op_dat<float> xn(nodes, 1, p_xn);
 
-  // matrix-free spmv
-  op_par_loop(laplace, elements,
-              &y,  0, &elem_node, OP_INC,
-              &x,  0, &elem_node, OP_READ,
+  op_sparsity mat_sparsity(elements, elem_node, elem_node);
+
+  op_sparse_matrix<float> mat(mat_sparsity);
+
+  // construct the matrix
+  op_par_loop(laplace, elements, mat,
+              &elem_node, 0, &elem_node, 0, OP_INC,
               &xn, 0, &elem_node, OP_READ);
+
+  // spmv
+  op_mat_mult(mat, x, y);
 
 }
 

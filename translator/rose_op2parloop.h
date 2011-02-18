@@ -93,7 +93,7 @@ class OPParLoop : public AstSimpleProcessing
     SgGlobal *fileGlobalScope;
     vector<SgProject*> kernels;
 
-    SgType *op_set, *op_dat, *op_ptr, *op_access, *op_plan;
+    SgType *op_set, *op_dat, *op_map, *op_access, *op_plan;
     SgBasicBlock *kernelBody, *stubBody, *reductionBody;
     
     bool reduction_required;

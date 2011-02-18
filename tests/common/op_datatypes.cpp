@@ -8,7 +8,7 @@
 // Extern Methods
 //
 extern void fixup_op_set(op_set* set);
-extern void fixup_op_ptr(op_ptr* ptr);
+extern void fixup_op_map(op_map* map);
 extern void op_decl_const_i(const char* dat, int size, char const *name);
 
 //
@@ -62,34 +62,34 @@ bool _op_set::is_null()
 
 
 //
-// OP Ptr Structure Methods
+// OP map Structure Methods
 //
 
 // Constructor
-_op_ptr::_op_ptr()
+_op_map::_op_map()
 {
   this->from = _op_set();
   this->to = _op_set();
   this->dim = 0;
-  this->ptr = NULL;
+  this->map = NULL;
   this->name = "id";
   this->index = -1;
 }
 
-// Constructor op_ptr
-_op_ptr::_op_ptr(op_set from, op_set to, int dim, int *ptr, char const *name)
+// Constructor op_map
+_op_map::_op_map(op_set from, op_set to, int dim, int *map, char const *name)
 {
   this->from = from;
   this->to   = to;
   this->dim  = dim;
-  this->ptr  = ptr;
+  this->map  = map;
   this->name = name;
   
-  fixup_op_ptr(this);
+  fixup_op_map(this);
 }
 
 // Destructor
-_op_ptr::~_op_ptr()
+_op_map::~_op_map()
 {
 
 }

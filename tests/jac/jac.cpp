@@ -26,7 +26,7 @@ float alpha[2];
 // OP header file
 //
 
-#include "op_seq.h"
+#include <op_seq.h>
 
 
 //
@@ -117,8 +117,8 @@ int main(int argc, char **argv){
   op_set nodes(nnode, NULL);
   op_set edges(nedge, NULL);
 
-  op_ptr pedge1(edges,nodes,1,p1);
-  op_ptr pedge2(edges,nodes,1,p2);
+  op_map pedge1(edges,nodes,1,p1);
+  op_map pedge2(edges,nodes,1,p2);
 
   op_dat<double> p_A(edges,1, A);
   op_dat<float> p_r(nodes,1, r);

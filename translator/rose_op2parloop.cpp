@@ -203,7 +203,7 @@ void OPParLoop::generateGlobalKernelsHeader()
   
   addTextForUnparser(globalScope, "#ifndef OP_KERNELS\n", AstUnparseAttribute::e_before);
   addTextForUnparser(globalScope, "#define OP_KERNELS\n", AstUnparseAttribute::e_before);
-  addTextForUnparser(globalScope, "#include \"op_datatypes.h\"\n", AstUnparseAttribute::e_before);
+  addTextForUnparser(globalScope, "#include <op_datatypes.h>\n", AstUnparseAttribute::e_before);
   
   map<string, SgFunctionDeclaration*>::iterator p;
   for(p=cudaFunctionDeclarations.begin(); p != cudaFunctionDeclarations.end() ; ++p)
@@ -410,9 +410,9 @@ SgFunctionParameterList* OPParLoop::createStandardParameters(op_par_loop_args *p
     nm = buildInitializedName(SgName("ind_arg" + buildStr(i)), argType);
     appendArg(paramList, nm);
 
-    // Add "ind_arg0_ptrs"
+    // Add "ind_arg0_maps"
     argType = buildPointerType(buildIntType());
-    nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_ptrs"), argType);
+    nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_maps"), argType);
     appendArg(paramList, nm);
 
     // Add "ind_arg0_sizes"
@@ -431,9 +431,9 @@ SgFunctionParameterList* OPParLoop::createStandardParameters(op_par_loop_args *p
       reduction_required = true;
     if(pl->args[i]->usesIndirection())
     {
-      // Add "arg1_ptr"
+      // Add "arg1_map"
       argType = buildPointerType(buildIntType());
-      nm = buildInitializedName(arg(i) + SgName("_ptrs"), argType);
+      nm = buildInitializedName(arg(i) + SgName("_maps"), argType);
       appendArg(paramList, nm);
     }
     else if(pl->args[i]->isGlobal())
@@ -477,10 +477,10 @@ void OPParLoop::createSharedVariableDeclarations(op_par_loop_args *pl)
   addTextForUnparser(varDec,"\n\n  extern __shared__ ", AstUnparseAttribute::e_after);
   appendStatement(varDec,kernelBody);
 
-  // Add shared variables for the planContainer variables - for each category <ptr>
+  // Add shared variables for the planContainer variables - for each category <map>
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
   {
-    createSharedVariable("ind_"+arg(i)+"_ptr", buildPointerType(buildIntType()), kernelBody);
+    createSharedVariable("ind_"+arg(i)+"_map", buildPointerType(buildIntType()), kernelBody);
   }
 
   // Add shared variables for the planContainer variables - for each category <size>
@@ -501,7 +501,7 @@ void OPParLoop::createSharedVariableDeclarations(op_par_loop_args *pl)
   {
     if(pl->args[i]->usesIndirection())
     {
-      createSharedVariable(arg(i)+"_ptr", buildPointerType(buildIntType()), kernelBody);
+      createSharedVariable(arg(i)+"_map", buildPointerType(buildIntType()), kernelBody);
     }
     else if(!pl->args[i]->consideredAsConst())
     {
@@ -696,7 +696,7 @@ SgFunctionParameterList* OPParLoop::buildSpecialStubParameters(op_par_loop_args 
     appendArg(paramList, name);
     name = buildInitializedName(SgName("idx"+buildStr(i)), buildIntType());
     appendArg(paramList, name);
-    name = buildInitializedName(SgName("ptr"+buildStr(i)), buildPointerType(op_map));
+    name = buildInitializedName(SgName("map"+buildStr(i)), buildPointerType(op_map));
     appendArg(paramList, name);
     name = buildInitializedName(SgName("acc"+buildStr(i)), op_access);
     appendArg(paramList, name);
@@ -865,8 +865,8 @@ void OPParLoop::createSharedVariableOffsetInitialiser(op_par_loop_args *pl)
   for(unsigned int i=0; i<pl->planContainer.size(); i++)
   {
     expression = buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_offset[blockId]"));
-    expression = buildAddOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_ptrs")), expression);
-    expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_ptr")), expression);
+    expression = buildAddOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_maps")), expression);
+    expression = buildAssignOp(buildOpaqueVarRefExp(SgName("ind_" + arg(i) + "_map")), expression);
     appendStatement(buildExprStatement(expression), ifBody);
   }
 
@@ -876,8 +876,8 @@ void OPParLoop::createSharedVariableOffsetInitialiser(op_par_loop_args *pl)
   {
     if(pl->args[i]->usesIndirection())
     {
-      SgExpression* ex = buildAddOp(buildOpaqueVarRefExp(SgName(arg(i) + "_ptrs")), expression);
-      ex = buildAssignOp(buildOpaqueVarRefExp(SgName(arg(i) + "_ptr")), ex);
+      SgExpression* ex = buildAddOp(buildOpaqueVarRefExp(SgName(arg(i) + "_maps")), expression);
+      ex = buildAssignOp(buildOpaqueVarRefExp(SgName(arg(i) + "_map")), ex);
       appendStatement(buildExprStatement(ex), ifBody);
     }
     else if(!pl->args[i]->consideredAsConst())
@@ -942,7 +942,7 @@ void OPParLoop::createCopyToShared(op_par_loop_args *pl)
       if(pl->planContainer[i]->access == OP_READ || pl->planContainer[i]->access == OP_RW)
       {
         // Create cached variable
-        SgExpression* e = buildOpaqueVarRefExp(SgName("ind_") + arg(i) + SgName("_ptr[n]"));
+        SgExpression* e = buildOpaqueVarRefExp(SgName("ind_") + arg(i) + SgName("_map[n]"));
         SgStatement *vdec = buildVariableDeclaration( SgName("ind_index"), buildIntType(), buildAssignInitializer(e) );
         appendStatement(vdec, loopBody);
       }
@@ -981,7 +981,7 @@ void OPParLoop::createCopyToShared(op_par_loop_args *pl)
       {
         case OP_READ:
         case OP_RW:
-          asgnName = SgName("ind_") + arg(i) + SgName("[ind_") + arg(i) + SgName("_ptr[n]*") + SgName(buildStr(pl->planContainer[i]->dim)) + SgName("]");
+          asgnName = SgName("ind_") + arg(i) + SgName("[ind_") + arg(i) + SgName("_map[n]*") + SgName(buildStr(pl->planContainer[i]->dim)) + SgName("]");
           asgnExpr = buildOpaqueVarRefExp(asgnName);
           break;
         case OP_WRITE:
@@ -1142,7 +1142,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
         }
         else
         {
-          SgExpression *expression = buildMultiplyOp(buildOpaqueVarRefExp(SgName(arg(i)+"_ptr[n]")), buildIntVal(pl->args[i]->dim));
+          SgExpression *expression = buildMultiplyOp(buildOpaqueVarRefExp(SgName(arg(i)+"_map[n]")), buildIntVal(pl->args[i]->dim));
           expression = buildAddOp(buildOpaqueVarRefExp(SgName("ind_" + arg(pl->args[i]->plan_index) + "_s")), expression);
           kPars->append_expression(expression);
         }
@@ -1222,7 +1222,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
         if(pl->args[i]->dim > 1)
         {
           // Create cached variable
-          SgExpression* e = buildOpaqueVarRefExp(arg(i)+ SgName("_ptr[n]"));
+          SgExpression* e = buildOpaqueVarRefExp(arg(i)+ SgName("_map[n]"));
           if(!alreadyDefined)
           {
             SgStatement *vdec = buildVariableDeclaration( SgName("ind_index"), buildIntType(), buildAssignInitializer(e) );
@@ -1246,7 +1246,7 @@ void OPParLoop::generateStandard(SgFunctionCallExp *fn, op_par_loop_args *pl)
         }
         else
         {
-            SgName dstName = SgName("ind_")+ arg(pl->args[i]->plan_index)+ SgName("_s[")+ arg(i)+ SgName("_ptr[n]*" + buildStr(pl->args[i]->dim) + "]");
+            SgName dstName = SgName("ind_")+ arg(pl->args[i]->plan_index)+ SgName("_s[")+ arg(i)+ SgName("_map[n]*" + buildStr(pl->args[i]->dim) + "]");
             SgName srcName = argLocal(i) + SgName("[0]");
             expression = buildPlusAssignOp( buildOpaqueVarRefExp(dstName), buildOpaqueVarRefExp(srcName) );
             appendStatement(buildExprStatement(expression), condBody);      
@@ -1303,7 +1303,7 @@ void OPParLoop::createCopyFromShared(op_par_loop_args *pl)
       if(pl->planContainer[i]->dim > 1)
       {
         // Create cached variable
-        SgExpression* e = buildOpaqueVarRefExp(SgName("ind_") + arg(i) + SgName("_ptr[n]"));
+        SgExpression* e = buildOpaqueVarRefExp(SgName("ind_") + arg(i) + SgName("_map[n]"));
         SgStatement *vdec = buildVariableDeclaration( SgName("ind_index"), buildIntType(), buildAssignInitializer(e) );
         appendStatement(vdec, loopBody);
         
@@ -1330,7 +1330,7 @@ void OPParLoop::createCopyFromShared(op_par_loop_args *pl)
       else
       {
         SgExpression *rhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("_s[n*" + buildStr(pl->planContainer[i]->dim) + "]"));
-        SgExpression *lhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("[ind_" + arg(i) + "_ptr[n]*" + buildStr(pl->planContainer[i]->dim) + "]"));
+        SgExpression *lhs = buildOpaqueVarRefExp(SgName("ind_" + arg(i)) + SgName("[ind_" + arg(i) + "_map[n]*" + buildStr(pl->planContainer[i]->dim) + "]"));
         SgExpression *expression = buildAssignOp( lhs, rhs );
         appendStatement(buildExprStatement(expression), loopBody);
       }
@@ -1357,7 +1357,7 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
     appendArg(paramList, name);
     name = buildInitializedName(SgName("idx"+buildStr(i)), buildIntType());
     appendArg(paramList, name);
-    name = buildInitializedName(SgName("ptr"+buildStr(i)), buildPointerType(op_map));
+    name = buildInitializedName(SgName("map"+buildStr(i)), buildPointerType(op_map));
     appendArg(paramList, name);
     name = buildInitializedName(SgName("acc"+buildStr(i)), op_access);
     appendArg(paramList, name);
@@ -1385,7 +1385,7 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
   // Add plan variables
   SgExprListExp* exprList_args = buildExprListExp();
   SgExprListExp* exprList_idxs = buildExprListExp();
-  SgExprListExp* exprList_ptrs = buildExprListExp();
+  SgExprListExp* exprList_maps = buildExprListExp();
   SgExprListExp* exprList_dims = buildExprListExp();
   SgExprListExp* exprList_accs = buildExprListExp();
   SgExprListExp* exprList_inds = buildExprListExp();
@@ -1399,12 +1399,12 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
     if(pl->args[i]->usesIndirection())
     {
       exprList_idxs->append_expression( buildOpaqueVarRefExp(SgName("idx"+buildStr(i))) );
-      exprList_ptrs->append_expression( buildPointerDerefExp(buildOpaqueVarRefExp(SgName("ptr"+buildStr(i)))) );
+      exprList_maps->append_expression( buildPointerDerefExp(buildOpaqueVarRefExp(SgName("map"+buildStr(i)))) );
     }
     else
     {
       exprList_idxs->append_expression( buildIntVal(-1) );
-      exprList_ptrs->append_expression( buildOpaqueVarRefExp(SgName("OP_ID")) );
+      exprList_maps->append_expression( buildOpaqueVarRefExp(SgName("OP_ID")) );
     }
     exprList_dims->append_expression( buildOpaqueVarRefExp(SgName(arg(i)+"->dim"))     );
     exprList_accs->append_expression( buildOpaqueVarRefExp(SgName("acc"+buildStr(i))) );
@@ -1414,7 +1414,7 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
   appendStatement(varDec,stubBody);
   varDec = buildVariableDeclaration( SgName("idxs"), buildArrayType(buildIntType(), buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_idxs), stubBody);
   appendStatement(varDec,stubBody);
-  varDec = buildVariableDeclaration( SgName("ptrs"), buildArrayType(op_map, buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_ptrs), stubBody);
+  varDec = buildVariableDeclaration( SgName("maps"), buildArrayType(op_map, buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_maps), stubBody);
   appendStatement(varDec,stubBody);
   varDec = buildVariableDeclaration( SgName("dims"), buildArrayType(buildIntType(), buildIntVal(pl->numArgs())), buildAggregateInitializer(exprList_dims), stubBody);
   appendStatement(varDec,stubBody);
@@ -1425,7 +1425,7 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
   
 
   // Create and initialize the Plan variable pointer
-  //Example: op_plan *Plan = plan(name,set,nargs,args,idxs,ptrs,dims,typs,accs,ninds,inds);
+  //Example: op_plan *Plan = plan(name,set,nargs,args,idxs,maps,dims,typs,accs,ninds,inds);
   // Create the plan function call, 1) first create params, 2) then call the function
   SgExprListExp *planPars = buildExprListExp();
   planPars->append_expression(buildOpaqueVarRefExp(SgName("name")));
@@ -1433,7 +1433,7 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
   planPars->append_expression(buildOpaqueVarRefExp(SgName("nargs")));
   planPars->append_expression(buildOpaqueVarRefExp(SgName("args")));
   planPars->append_expression(buildOpaqueVarRefExp(SgName("idxs")));
-  planPars->append_expression(buildOpaqueVarRefExp(SgName("ptrs")));
+  planPars->append_expression(buildOpaqueVarRefExp(SgName("maps")));
   planPars->append_expression(buildOpaqueVarRefExp(SgName("dims")));
   planPars->append_expression(buildOpaqueVarRefExp(SgName("accs")));
   planPars->append_expression(buildOpaqueVarRefExp(SgName("ninds")));
@@ -1481,7 +1481,7 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
       SgExpression *e = buildOpaqueVarRefExp(SgName("arg"+buildStr(pl->planContainer[i]->own_index)+"->dat_d"));
       e = buildCastExp(e, buildPointerType(pl->planContainer[i]->type));
       kPars->append_expression(e);
-      e = buildOpaqueVarRefExp(SgName("Plan->ind_ptrs["+buildStr(i)+"]"));
+      e = buildOpaqueVarRefExp(SgName("Plan->ind_maps["+buildStr(i)+"]"));
       kPars->append_expression(e);
       e = buildOpaqueVarRefExp(SgName("Plan->ind_sizes["+buildStr(i)+"]"));
       kPars->append_expression(e);
@@ -1493,7 +1493,7 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
     {
       if(pl->args[i]->usesIndirection())
       {
-        SgExpression *e = buildOpaqueVarRefExp(SgName("Plan->ptrs["+buildStr(i)+"]"));
+        SgExpression *e = buildOpaqueVarRefExp(SgName("Plan->maps["+buildStr(i)+"]"));
         kPars->append_expression(e);
       }
       else

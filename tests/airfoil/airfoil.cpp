@@ -49,13 +49,13 @@ using namespace std;
 // global constants
 
 float gam, gm1, cfl, eps, mach, alpha;
-#include "user_defined_types.h"
+#include <user_defined_types.h>
 myconst air_const = {2.0f, 1.0f};
 //
 // OP header file
 //
 
-#include "op_seq.h"
+#include <op_seq.h>
 
 //
 // kernel routines for parallel loops
@@ -188,9 +188,9 @@ int main(int argc, char **argv){
   op_set edges(nedge, &edge_part_info);
   op_set cells(ncell, NULL);
 
-  op_ptr pedge(edges,nodes,2,edge);
-  op_ptr pecell(edges,cells,2,ecell,"pecell2");
-  op_ptr pcell(cells,nodes,4,cell);
+  op_map pedge(edges,nodes,2,edge);
+  op_map pecell(edges,cells,2,ecell,"pecell2");
+  op_map pcell(cells,nodes,4,cell);
 
   op_dat<int>   p_boun(edges,1,boun,"pp_boun");
   op_dat<float> p_x(nodes,2,x);

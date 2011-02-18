@@ -78,8 +78,8 @@ void OPBuild::generateBuildFile()
   
   // Add important files
   cout << "Adding includes and imports" << endl;
-  addTextForUnparser(globalScope, "#include \"op_lib.cu\"\n", AstUnparseAttribute::e_before);
-  addTextForUnparser(globalScope, "#import \"op_datatypes.cpp\"\n", AstUnparseAttribute::e_before);
+  addTextForUnparser(globalScope, "#include <op_lib.cu>\n", AstUnparseAttribute::e_before);
+  addTextForUnparser(globalScope, "#import <op_datatypes.cpp>\n", AstUnparseAttribute::e_before);
   
   // Add shared const variables
   cout << "Adding shared const variables" << endl;

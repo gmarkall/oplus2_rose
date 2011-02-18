@@ -1,17 +1,22 @@
+COMMONDIR := ../common
 OP2ROSE := ../../translator/op2rose
+
 NVCC := nvcc
-NVCCFLAGS := -arch sm_13 -g
+INCLUDEFLAGS := -I$(COMMONDIR)
+NVCCFLAGS := -arch sm_13 -g $(INCLUDEFLAGS)
 
+VPATH = $(COMMONDIR)
 
-all: build
+SOURCES = rose_airfoil.cpp op_par.cu cutil.cpp \
+	cmd_arg_reader.cpp stopwatch.cpp bank_checker.cpp stopwatch_linux.cpp
 
-build: src2src
-	$(NVCC) $(NVCCFLAGS) rose_airfoil.cpp op_par.cu cutil.cpp \
-	cmd_arg_reader.cpp stopwatch.cpp bank_checker.cpp \
-	stopwatch_linux.cpp -o airfoil
+all: src2src build
+
+build: $(SOURCES)
+	$(NVCC) $(NVCCFLAGS) $^ -o airfoil
 
 src2src: clean
-	$(OP2ROSE) airfoil.cpp
+	$(OP2ROSE) $(INCLUDEFLAGS) airfoil.cpp
 
 clean:
 	rm -f op_par.cu kernels.h res_calc_kernel.cu update_kernel.cu \

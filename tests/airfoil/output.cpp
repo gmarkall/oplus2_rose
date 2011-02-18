@@ -10,7 +10,8 @@
 
 float gam, gm1, cfl, eps, mach, alpha;
 
-#include "op_seq.h"
+#include <op_seq.h>
+
 #include "input.h"
 
 using namespace std;

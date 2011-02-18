@@ -34,7 +34,7 @@
 
 
 #ifndef OP_DIAGS
-#define OP_DIAGS 0
+#define OP_DIAGS 2
 #endif
 
 #ifndef BSIZE
@@ -83,7 +83,7 @@ void op_decl_const(int dim, T *dat, char const *name = "")
 #define OP_NULL_SET op_set()
 
 // identity mapping
-#define OP_ID op_ptr()
+#define OP_ID op_map()
 
 //
 //  min / max definitions
@@ -125,20 +125,20 @@ protected:
   bool is_null();
 }op_set;
 
-// struct: op_ptr
-typedef struct _op_ptr 
+// struct: op_map
+typedef struct _op_map 
 {
   op_set      from,   // set pointed from
               to;     // set pointed to
   int         dim,    // dimension of pointer
               index,  // index into list of pointers
-             *ptr;    // array defining pointer
+             *map;    // array defining pointer
   char const *name;   // name of pointer
 
-  _op_ptr();
-  _op_ptr(op_set from, op_set to, int dim, int *ptr, char const *name = "");
-  ~_op_ptr();
-}op_ptr;
+  _op_map();
+  _op_map(op_set from, op_set to, int dim, int *map, char const *name = "");
+  ~_op_map();
+}op_map;
 
 // struct: op_dat
 template <class T>
@@ -209,23 +209,34 @@ typedef struct _op_plan{
   // input arguments
   char const  *name;
   int          set_index, nargs;
-  int         *arg_idxs, *idxs, *ptr_idxs, *dims;
+  int         *arg_idxs, *idxs, *map_idxs, *dims;
   op_access   *accs;
 
   // execution plan
   int        *nthrcol;  // number of thread colors for each block
   int        *thrcol;   // thread colors
   int        *offset;   // offset for primary set
-  int       **ind_ptrs; // pointers for indirect datasets
+  int       **ind_maps; // pointers for indirect datasets
   int       **ind_offs; // offsets for indirect datasets
   int       **ind_sizes;// sizes for indirect datasets
-  int       **ptrs;     // regular pointers, renumbered as needed
+  int       **maps;     // regular pointers, renumbered as needed
   int        *nelems;   // number of elements in each block
   int         ncolors;  // number of block colors
   int        *ncolblk;  // number of blocks for each color
   int        *blkmap;   // block mapping
   int         nshared;  // bytes of shared memory required
 } op_plan;
+
+
+void op_fetch_data_i(op_dat<void> *d);
+
+template <class T>
+void op_fetch_data(op_dat<T> *d)
+{
+  op_fetch_data_i((op_dat<void> *)d);
+}
+
+
 
 #endif
 

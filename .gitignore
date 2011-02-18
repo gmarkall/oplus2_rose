@@ -1,0 +1,9 @@
+tests/*/*_kernel.cu
+tests/*/op_par.cu
+tests/*/rose_*.cpp
+tests/*/kernels.h
+tests/airfoil/airfoil
+tests/jac/jac
+tests/*/blank.cpp
+translator/op2rose
+*.o

@@ -40,13 +40,6 @@ struct Data2D
 };
 
 template < typename T >
-class Coordinates
-{
-public:
-  T& operator[](uint i);
-};
-
-template < typename T >
 inline void laplace(Data1D<T>& A, const Data1D<T>& x) {
   const T hinv = 1./(x[1] - x[0]);
   A[0] = hinv;

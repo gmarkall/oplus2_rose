@@ -62,8 +62,8 @@ int main(int argc, char **argv){
   op_sparse_matrix<float> mat(mat_sparsity);
 
   // construct the matrix
-  op_par_loop(laplace, elements, mat,
-              &elem_node, 0, &elem_node, 0, OP_INC,
+  op_par_loop(laplace, elements,
+              &mat, OP_COLON, &elem_node, OP_COLON, &elem_node, OP_INC,
               &xn, 0, &elem_node, OP_READ);
 
   // spmv

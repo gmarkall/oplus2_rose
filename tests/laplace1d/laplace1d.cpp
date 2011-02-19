@@ -59,9 +59,9 @@ int main(int argc, char **argv){
 
   // matrix-free spmv
   op_par_loop(laplace, elements,
-              &y,  0, &elem_node, OP_INC,
-              &x,  0, &elem_node, OP_READ,
-              &xn, 0, &elem_node, OP_READ);
+              &y,  OP_COLON, &elem_node, OP_INC,
+              &x,  OP_COLON, &elem_node, OP_READ,
+              &xn, OP_COLON, &elem_node, OP_READ);
 
 }
 

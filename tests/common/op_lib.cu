@@ -48,17 +48,21 @@ using namespace std;
 // global variables
 //
 
-// Indices for enumerating sets, maps, dats, plans
-int OP_set_index=0,
-    OP_map_index=0,
-    OP_dat_index=0,
-    OP_nplans   =0;
+, maps, dats, plans
+int OP_set_index=0,    // Index for enumerating sets
+    OP_map_index=0,    // Index for enumerating maps
+    OP_dat_index=0,    // Index for enumerating dats
+    OP_nplans   =0,    // Index for enumerating plans
+    OP_diags     =0,   // Diagnostic level
+    OP_part_size =0,   // Partition size
+    OP_block_size=512; // Block size
 
 // Arrays holding global sets, maps, dats, plans
 op_set         * OP_set_list[10];
 op_map         * OP_map_list[10];
 op_dat<void>   * OP_dat_list[10];
-op_plan            OP_plans[100];
+op_plan          OP_plans[100];
+op_kernel        OP_kernels[100];
 
 // arrays for global constants and reductions
 
@@ -70,8 +74,32 @@ char *OP_consts_h, *OP_consts_d, *OP_reduct_h, *OP_reduct_d;
 //
 
 // Initialise OP2 environment (initialises GPU)
-void op_init(int argc, char **argv){
+void op_init(int argc, char **argv, int diags){
   cutilDeviceInit(argc, argv);
+  OP_diags = diags;
+
+#ifdef OP_BLOCK_SIZE
+  OP_block_size = OP_BLOCK_SIZE;
+#endif
+#ifdef OP_PART_SIZE
+  OP_part_size = OP_PART_SIZE;
+#endif
+
+  for (int n=1; n<argc; n++) {
+    if (strncmp(argv[n],"OP_BLOCK_SIZE=",14)==0) {
+      OP_block_size = atoi(argv[n]+14);
+      printf("\n OP_block_size = %d \n", OP_block_size);
+    }
+    if (strncmp(argv[n],"OP_PART_SIZE=",13)==0) {
+      OP_part_size = atoi(argv[n]+13);
+      printf("\n OP_part_size  = %d \n", OP_part_size);
+    }
+  }
+
+  for (int n=0; n<100; n++) {
+    OP_kernels[n].count    = 0;
+    OP_kernels[n].transfer = 0.0f;
+  }
 }
 
 /// Declare a constant and upload to GPU memory
@@ -135,7 +163,7 @@ void pop_op_dat_as_reduct(op_dat<void>& data)
 
 /// Print statistics of declared sets, maps, dats
 void op_diagnostic_output(){
-  if (OP_DIAGS > 1) {
+  if (OP_diags > 1) {
     printf("\n  OP diagnostic output\n");
     printf(  "  --------------------\n");
 
@@ -160,6 +188,21 @@ void op_diagnostic_output(){
       printf("%10s %10d %10s\n",dat.name,dat.dim,dat.set.name);
     }
     printf("\n");
+  }
+}
+
+/// Print timing and bandwidth statistics for kernel invocations
+void op_timing_output() {
+  printf("\n  count     time     GB/s   kernel name ");
+  printf("\n --------------------------------------- \n");
+  for (int n=0; n<100; n++) {
+    if (OP_kernels[n].count>0) {
+      printf(" %6d  %8.4f %8.4f   %s \n",
+	     OP_kernels[n].count,
+             OP_kernels[n].time,
+             OP_kernels[n].transfer/(1024.0f*1024.0f*1024.0f*OP_kernels[n].time),
+             OP_kernels[n].name);
+    }
   }
 }
 
@@ -478,16 +521,16 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
 
   if (match) {
     ip--;
-    if (OP_DIAGS > 1) printf(" old execution plan #%d\n",ip);
+    if (OP_diags > 3) printf(" old execution plan #%d\n",ip);
     return &(OP_plans[ip]);
   }
   else {
-    if (OP_DIAGS > 1) printf(" new execution plan #%d\n",ip);
+    if (OP_diags > 1) printf(" new execution plan #%d for kernel %s\n",ip,name);
   }
 
   // consistency checks
 
-  if (OP_DIAGS > 0) {
+  if (OP_diags > 0) {
     for (int m=0; m<nargs; m++) {
       if (idxs[m] == -1) {
         //if (maps[m].index != -1) {
@@ -517,9 +560,20 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
     }
   }
 
-  // set blocksize and number of blocks
-  int bsize   = 256;   // blocksize
+  // work out worst case shared memory requirement per element
+
+  int maxbytes = 0;
+  for (int m=0; m<nargs; m++) {
+    if (inds[m]>=0) maxbytes += args[m].size;
+  }
+
+  // set blocksize and number of blocks;
+  // adaptive size based on 48kB of shared memory
+
+  int bsize   = OP_part_size;   // blocksize
+  if (bsize==0) bsize = (48*1024/(64*maxbytes))*64;
   int nblocks = (set.size-1)/bsize + 1;
+
 	bool smartpartition = false;	
 
 	if(set.partinfo != NULL)
@@ -597,8 +651,10 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
 
   int *nindirect;
   nindirect = (int *)calloc(ninds,sizeof(int));  // total number of indirect elements
-	
-	int bs_offset = 0;
+
+  float total_colors = 0;
+
+  int bs_offset = 0;
   for (int b=0; b<nblocks; b++) {
 		
     int  bs   = MIN(bsize, set.size - bs_offset);
@@ -635,7 +691,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
       ne = e;  // number of distinct elements
 
       /*
-      if (OP_DIAGS > 5) {
+      if (OP_diags > 5) {
         printf(" indirection set %d: ",m);
         for (int e=0; e<ne; e++) printf(" %d",work2[e]);
         printf(" \n");
@@ -690,6 +746,8 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
 
     // now colour main set elements
 
+    for (int e=b*bsize; e<b*bsize+bs; e++) OP_plans[ip].thrcol[e]=-1;
+
     int repeat  = 1;
     int ncolor  = 0;
     int ncolors = 0;
@@ -704,7 +762,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
       }
 
       for (int e=bs_offset; e<bs_offset+bs; e++) {
-        if (OP_plans[ip].thrcol[e]==0) {
+        if (OP_plans[ip].thrcol[e] == -1) {
           int mask = 0;
           for (int m=0; m<nargs; m++)
             if (inds[m]>=0 && accs[m]==OP_INC)
@@ -730,27 +788,30 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
     }
 
     OP_plans[ip].nthrcol[b] = ncolors;  // number of thread colors in this block
+    total_colors += ncolors;
+
+    // if(ncolors>1) printf(" number of colors in this block = %d \n",ncolors);
 
     // reorder elements by color?
-		
 
-		// update bs_offset
-		if(smartpartition)
-			bs_offset += set.partinfo->at(b);
-		else
-			bs_offset += bsize;
+	// update bs_offset
+	if(smartpartition)
+		bs_offset += set.partinfo->at(b);
+	else
+		bs_offset += bsize;
   }
 
 
   // colour the blocks, after initialising colors to 0
-	
+
   int *blk_col;
-  blk_col = (int *)calloc(nblocks,sizeof(int));
+  blk_col = (int *) malloc(nblocks*sizeof(int));
+  for (int b=0; b<nblocks; b++) blk_col[b] = -1;
 
   int repeat  = 1;
   int ncolor  = 0;
   int ncolors = 0;
-	
+
   while (repeat) {
     repeat = 0;
 
@@ -767,7 +828,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
         uint mask = 0;
 
         for (int m=0; m<nargs; m++) {
-          if (inds[m]>=0) 
+          if (inds[m]>=0 && accs[m]==OP_INC) 
             for (int e=bs_offset; e<bs_offset+bs; e++)
               mask |= work[inds[m]][maps[m].map[idxs[m]+e*maps[m].dim]]; // set bits of mask
         }
@@ -782,7 +843,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
           ncolors = MAX(ncolors, ncolor+color+1);
 
           for (int m=0; m<nargs; m++) {
-            if (inds[m]>=0)
+            if (inds[m]>=0 && accs[m]==OP_INC)
               for (int e=bs_offset; e<bs_offset+bs; e++)
                 work[inds[m]][maps[m].map[idxs[m]+e*maps[m].dim]] |= mask;
           }
@@ -797,7 +858,6 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
 
     ncolor += 32;   // increment base level
   }
-
 
   // store block mapping and number of blocks per color
 
@@ -831,6 +891,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
   // work out shared memory requirements
 
   OP_plans[ip].nshared = 0;
+  float total_shared = 0;
 
   for (int b=0; b<nblocks; b++) {
     int nbytes = 0;
@@ -841,10 +902,48 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
       nbytes += ROUND_UP(OP_plans[ip].ind_sizes[m][b]*args[m2].size);
     }
     OP_plans[ip].nshared = MAX(OP_plans[ip].nshared,nbytes);
+    total_shared += nbytes;
   }
 
-  // printf(" shared memory = %d bytes \n",OP_plans[ip].nshared);
+  // work out total bandwidth requirements
 
+  OP_plans[ip].transfer = 0;
+
+  for (int b=0; b<nblocks; b++) {
+    for (int m=0; m<nargs; m++) {
+      if (inds[m]<0) {
+        float fac = 2.0f;
+        if (accs[m]==OP_READ) fac = 1.0f;
+        OP_plans[ip].transfer += fac*OP_plans[ip].nelems[b]*args[m].size;
+      }
+      else {
+        OP_plans[ip].transfer += OP_plans[ip].nelems[b]*sizeof(int);
+      }
+    }
+    for (int m=0; m<ninds; m++) {
+      int m2 = 0;
+      while(inds[m2]!=m) m2++;
+      float fac = 2.0f;
+      if (accs[m2]==OP_READ) fac = 1.0f;
+      OP_plans[ip].transfer += fac*OP_plans[ip].ind_sizes[m][b]*args[m2].size;
+    }
+  }
+
+  // print out useful information
+
+  if (OP_diags>1) {
+    //for (int n=0; n<OP_plans[ip].ncolors; n++)
+    //  printf(" number of blocks of color %d = %d \n",
+    //         n,OP_plans[ip].ncolblk[n]);
+    printf(" number of blocks       = %d \n",nblocks);
+    printf(" number of block colors = %d \n",OP_plans[ip].ncolors);
+    printf(" maximum block size     = %d \n",bsize);
+    printf(" average thread colors  = %.2f \n",total_colors/nblocks);
+    printf(" shared memory required = %.2f KB \n",OP_plans[ip].nshared/1024.0f);
+    printf(" average data reuse     = %.2f \n",maxbytes*(set.size/total_shared));
+    printf(" total data transfer    = %.2f MB \n\n",
+                                       OP_plans[ip].transfer/(1024.0f*1024.0f));
+  }
 
   // validate plan info
 
@@ -903,7 +1002,7 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
   if (nelem != set.size) {
     printf(" *** OP_plan_check: nelems error \n");
   }
-  else {
+  else if (OP_diags>6) {
     printf(" *** OP_plan_check: nelems   OK \n");
   }
 
@@ -922,7 +1021,7 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
   if (err != 0) {
     printf(" *** OP_plan_check: offset error \n");
   }
-  else {
+  else if (OP_diags>6) {
     printf(" *** OP_plan_check: offset   OK \n");
   }
 
@@ -942,7 +1041,7 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
   if (err != 0) {
     printf(" *** OP_plan_check: blkmap error \n");
   }
-  else {
+  else if (OP_diags>6) {
     printf(" *** OP_plan_check: blkmap   OK \n");
   }
 
@@ -996,7 +1095,7 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
   if (err != 0) {
     printf(" *** OP_plan_check: ind_maps error \n");
   }
-  else {
+  else if (OP_diags>6) {
     printf(" *** OP_plan_check: ind_maps OK \n");
   }
 
@@ -1026,7 +1125,7 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
   if (err != 0) {
     printf(" *** OP_plan_check: maps error \n");
   }
-  else {
+  else if (OP_diags>6) {
     printf(" *** OP_plan_check: maps     OK \n");
   }
 

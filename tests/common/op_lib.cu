@@ -48,11 +48,13 @@ using namespace std;
 // global variables
 //
 
+// Indices for enumerating sets, maps, dats, plans
 int OP_set_index=0,
     OP_map_index=0,
     OP_dat_index=0,
     OP_nplans   =0;
 
+// Arrays holding global sets, maps, dats, plans
 op_set         * OP_set_list[10];
 op_map         * OP_map_list[10];
 op_dat<void>   * OP_dat_list[10];
@@ -67,16 +69,18 @@ char *OP_consts_h, *OP_consts_d, *OP_reduct_h, *OP_reduct_d;
 // OP functions
 //
 
+// Initialise OP2 environment (initialises GPU)
 void op_init(int argc, char **argv){
   cutilDeviceInit(argc, argv);
 }
 
+/// Declare a constant and upload to GPU memory
 void op_decl_const_i(const char* dat, int size, char const *name)
 {
-  // printf(" op_decl_const: name = %s, size = %d\n",name,sizeof(T)*dim);
   cutilSafeCall( cudaMemcpyToSymbol(name, dat, size) );
 }
 
+/// Assign global index to set and add it to the global array of sets
 void fixup_op_set(op_set* set)
 {
   set->index = OP_set_index;
@@ -85,6 +89,7 @@ void fixup_op_set(op_set* set)
   OP_set_list[OP_set_index++] = set;
 }
 
+/// Assign global index to map and add it to the global array of maps
 void fixup_op_map(op_map* map)
 {
   map->index = OP_map_index;
@@ -93,6 +98,7 @@ void fixup_op_map(op_map* map)
   OP_map_list[OP_map_index++] = map;
 }
 
+/// Assign global index to dat and add it to the global array of dats
 void fixup_op_dat_data(op_dat<void>* data)
 {
   data->index = OP_dat_index;
@@ -104,6 +110,7 @@ void fixup_op_dat_data(op_dat<void>* data)
   cutilSafeCall(cudaMemcpy(data->dat_d, data->dat, data->size*data->set.size, cudaMemcpyHostToDevice));
 }
 
+/// FIXME what's this for?
 void push_op_dat_as_const(op_dat<void>& data, int offset_bytes)
 {
   data.dat   = OP_consts_h + offset_bytes;                                                  
@@ -111,6 +118,7 @@ void push_op_dat_as_const(op_dat<void>& data, int offset_bytes)
   memcpy(data.dat, data.dat_t, data.size);
 }
 
+/// FIXME what's this for?
 void push_op_dat_as_reduct(op_dat<void>& data, int offset_bytes)
 {
   data.dat   = OP_reduct_h + offset_bytes;
@@ -118,13 +126,14 @@ void push_op_dat_as_reduct(op_dat<void>& data, int offset_bytes)
   memcpy(data.dat, data.dat_t, data.size);
 }
 
+/// FIXME what's this for?
 void pop_op_dat_as_reduct(op_dat<void>& data)
 {
   memcpy(data.dat_t, data.dat, data.size);
 }
 
 
-
+/// Print statistics of declared sets, maps, dats
 void op_diagnostic_output(){
   if (OP_DIAGS > 1) {
     printf("\n  OP diagnostic output\n");
@@ -154,6 +163,7 @@ void op_diagnostic_output(){
   }
 }
 
+/// Finalise OP2 environment (does nothing)
 void op_exit(){
 }
 
@@ -175,11 +185,16 @@ int compare(const void *a2, const void *b2) {
       return 1;
 }
 
+
 //
-// utility routine to move arrays to GPU device
+// next few routines are CUDA-specific
 //
 
 #ifndef OP_x86
+
+//
+// utility routine to move arrays to GPU device
+//
 
 template <class T>
 void mvHostToDevice(T **ptr, int size) {
@@ -260,6 +275,7 @@ __inline__ __device__ void op_reduction(volatile T *dat_g, T dat_l)
   __syncthreads();
 
   if (tid<d) {
+    // this should be optimised out by the compiler (template parameter)
     switch (reduction) {
     case OP_INC:
       temp[tid] = temp[tid] + dat_l;
@@ -276,6 +292,7 @@ __inline__ __device__ void op_reduction(volatile T *dat_g, T dat_l)
   for (d>>=1; d>warpSize; d>>=1) {
     __syncthreads();
     if (tid<d) {
+      // this should be optimised out by the compiler (template parameter)
       switch (reduction) {
       case OP_INC:
         temp[tid] = temp[tid] + temp[tid+d];
@@ -292,19 +309,25 @@ __inline__ __device__ void op_reduction(volatile T *dat_g, T dat_l)
 
   __syncthreads();
 
-  if (tid<warpSize)
-    for (; d>0; d>>=1)
-      switch (reduction) {
-      case OP_INC:
-        temp[tid] = temp[tid] + temp[tid+d];
-        break;
-      case OP_MIN:
-        if(temp[tid+d]<temp[tid]) temp[tid] = temp[tid+d];
-        break;
-      case OP_MAX:
-        if(temp[tid+d]>temp[tid]) temp[tid] = temp[tid+d];
-        break;
+  volatile T *vtemp = temp;   // see Fermi compatibility guide 
+
+  if (tid<warpSize) {
+    for (; d>0; d>>=1) {
+      if (tid<d) {
+        switch (reduction) {
+        case OP_INC:
+          vtemp[tid] = vtemp[tid] + vtemp[tid+d];
+          break;
+        case OP_MIN:
+          if(vtemp[tid+d]<vtemp[tid]) vtemp[tid] = vtemp[tid+d];
+          break;
+        case OP_MAX:
+          if(vtemp[tid+d]>vtemp[tid]) vtemp[tid] = vtemp[tid+d];
+          break;
+        }
       }
+    }
+  }
 
   if (tid==0) {
     do {} while(atomicCAS(&OP_reduct_lock,0,1));  // set lock
@@ -469,7 +492,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
       if (idxs[m] == -1) {
         //if (maps[m].index != -1) {
         if (maps[m].map != NULL) {
-          printf("error2: wrong pointer for arg %d in kernel \"%s\"\n",m,name);
+          printf("error2: wrong map for arg %d in kernel \"%s\"\n",m,name);
           printf("maps[m].index = %d\n",maps[m].index);
           printf("maps[m].name  = %s\n",maps[m].name);
           exit(1);
@@ -478,12 +501,12 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
       else {
         if (set.index         != maps[m].from.index ||
             args[m].set.index != maps[m].to.index) {
-          printf("error: wrong pointer for arg %d in kernel \"%s\"\n",m,name);
+          printf("error: wrong map for arg %d in kernel \"%s\"\n",m,name);
           exit(1);
         }
         if (maps[m].dim <= idxs[m]) {
           printf(" %d %d",maps[m].dim,idxs[m]);
-          printf("error: invalid pointer index for arg %d in kernel \"%s\"\n",m,name);
+          printf("error: invalid map index for arg %d in kernel \"%s\"\n",m,name);
           exit(1);
         }
       }
@@ -996,7 +1019,6 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
           err += (p_global != map.map[OP_plan.idxs[m] + e * map.dim]);
         }
         ntot +=  OP_plan.nelems[n];
-				//printf("\nPLAN: %d %d", n, OP_plan.nelems[n]);
       }
     }
   }

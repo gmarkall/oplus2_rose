@@ -53,19 +53,20 @@ using namespace std;
 
 #define OP_WARPSIZE 32
 
-int OP_set_index=0,    // Index for enumerating sets
-    OP_map_index=0,    // Index for enumerating maps
-    OP_dat_index=0,    // Index for enumerating dats
-    OP_nplans   =0,    // Index for enumerating plans
-    OP_diags     =0,   // Diagnostic level
-    OP_part_size =0,   // Partition size
-    OP_block_size=512; // Block size
+int OP_set_index =0, OP_set_max =0,    // Index for enumerating sets
+    OP_map_index =0, OP_map_max =0,    // Index for enumerating maps
+    OP_dat_index =0, OP_dat_max =0,    // Index for enumerating dats
+    OP_plan_index=0, OP_plan_max=0,    // Index for enumerating plans
+    OP_diags     =0,                  // Diagnostic level
+    OP_part_size =0,                  // Partition size
+    OP_block_size=512;                // Block size
+    OP_cache_line_size=128;           // Cache line size
 
-op_set         * OP_set_list[10]; // Array holding global sets
-op_map         * OP_map_list[10]; // Array holding global maps
-op_dat<void>   * OP_dat_list[10]; // Array holding global dats
-op_plan          OP_plans[100];   // Array holding global plans
-op_kernel        OP_kernels[100]; // Array holding global kernels
+op_set       ** OP_set_list;                // Array holding global sets
+op_map       ** OP_map_list;                // Array holding global maps
+op_dat<void> ** OP_dat_list;                // Array holding global dats
+op_plan       * OP_plans;                   // Array holding global plans
+op_kernel       OP_kernels[OP_KERNELS_MAX]; // Array holding global kernels
 
 // arrays for global constants and reductions
 
@@ -105,11 +106,19 @@ void op_init(int argc, char **argv, int diags){
   }
 
 #ifndef OP_x86
+  #if CUDART_VERSION < 3020
+    #error : "must be compiled using CUDA 3.2 or later"
+  #endif
+
+  #ifdef CUDA_NO_SM_13_DOUBLE_INTRINSICS
+    #warning : " *** no support for double precision arithmetic *** "
+  #endif
+
   cutilSafeCall(cudaThreadSetCacheConfig(cudaFuncCachePreferShared));
   printf("\n 16/48 L1/shared \n");
 #endif
 
-  for (int n=0; n<100; n++) {
+  for (int n=0; n<OP_KERNELS_MAX; n++) {
     OP_kernels[n].count     = 0;
     OP_kernels[n].transfer  = 0.0f;
     OP_kernels[n].transfer2 = 0.0f;
@@ -209,7 +218,7 @@ void op_diagnostic_output(){
 void op_timing_output() {
   printf("\n  count     time     GB/s     GB/s   kernel name ");
   printf("\n ----------------------------------------------- \n");
-  for (int n=0; n<100; n++) {
+  for (int n=0; n<OP_KERNELS_MAX; n++) {
     if (OP_kernels[n].count>0) {
       if (OP_kernels[n].transfer2==0.0f)
         printf(" %6d  %8.4f %8.4f            %s \n",
@@ -266,6 +275,7 @@ void mvHostToDevice(T **map, int size) {
   T *tmp;
   cutilSafeCall(cudaMalloc((void **)&tmp, size));
   cutilSafeCall(cudaMemcpy(tmp, *map, size, cudaMemcpyHostToDevice));
+  cutilSafeCall(cudaThreadSynchronize());
   free(*map);
   *map = tmp;
 }
@@ -274,8 +284,10 @@ void mvHostToDevice(T **map, int size) {
 //
 // utility routine to copy dataset back to host
 //
-void op_fetch_data_i(op_dat<void> *data) {
-  cutilSafeCall(cudaMemcpy(data->dat, data->dat_d, data->size*data->set.size, cudaMemcpyDeviceToHost));
+
+extern void op_fetch_data(op_dat<void>& data) {
+  cutilSafeCall(cudaMemcpy(data.dat, data.dat_d, data.size*data.set.size,
+                cudaMemcpyDeviceToHost));
   cutilSafeCall(cudaThreadSynchronize());
 }
 
@@ -316,16 +328,19 @@ void reallocReductArrays(int reduct_bytes) {
 void mvConstArraysToDevice(int consts_bytes) {
   cutilSafeCall(cudaMemcpy(OP_consts_d, OP_consts_h, consts_bytes,
                 cudaMemcpyHostToDevice));
+  cutilSafeCall(cudaThreadSynchronize());
 }
 
 void mvReductArraysToDevice(int reduct_bytes) {
   cutilSafeCall(cudaMemcpy(OP_reduct_d, OP_reduct_h, reduct_bytes,
                 cudaMemcpyHostToDevice));
+  cutilSafeCall(cudaThreadSynchronize());
 }
 
 void mvReductArraysToHost(int reduct_bytes) {
   cutilSafeCall(cudaMemcpy(OP_reduct_h, OP_reduct_d, reduct_bytes,
                 cudaMemcpyDeviceToHost));
+  cutilSafeCall(cudaThreadSynchronize());
 }
 
 
@@ -517,7 +532,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
 
   int ip=0, match=0;
 
-  while (match==0 && ip<OP_nplans) {
+  while (match==0 && ip<OP_plan_index) {
     if ( (strcmp(name,        OP_plans[ip].name)==0)
              && (set.index == OP_plans[ip].set_index)
              && (nargs     == OP_plans[ip].nargs) ) {
@@ -588,17 +603,29 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
   if (bsize==0) bsize = (48*1024/(64*maxbytes))*64;
   int nblocks = (set.size-1)/bsize + 1;
 
-	bool smartpartition = false;	
+  // enlarge OP_plans array if needed
 
-	if(set.partinfo != NULL)
-	{
-		smartpartition = true;
-		nblocks = set.partinfo->size();
-		for(int q=0; q<nblocks; q++)
-		{
-			bsize = MAX(set.partinfo->at(q), bsize);
-		}
-	}
+  if (ip==OP_plan_max) {
+    // printf("allocating more memory for OP_plans \n");
+    OP_plan_max += 10;
+    OP_plans = (op_plan *) realloc(OP_plans,OP_plan_max*sizeof(op_plan));
+    if (OP_plans==NULL) {
+      printf(" op_plan error -- error reallocating memory for OP_plans\n");
+      exit(-1);  
+    }
+  }
+
+  bool smartpartition = false;
+
+  if(set.partinfo != NULL)
+  {
+    smartpartition = true;
+    nblocks = set.partinfo->size();
+    for(int q=0; q<nblocks; q++)
+    {
+      bsize = MAX(set.partinfo->at(q), bsize);
+    }
+  }
 	
   printf(" number of blocks = %d\n",nblocks);
 
@@ -642,7 +669,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
   OP_plans[ip].set_index = set.index;
   OP_plans[ip].nargs     = nargs;
     
-  OP_nplans++;
+  OP_plan_index++;
 
   // allocate working arrays
 
@@ -672,8 +699,8 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
     int  bs   = MIN(bsize, set.size - bs_offset);
 		if(smartpartition) bs = set.partinfo->at(b);
 
-    OP_plans[ip].offset[b] = bs_offset;    // offset for block
-    OP_plans[ip].nelems[b] = bs;         			// size of block
+    OP_plans[ip].offset[b] = bs_offset;  // offset for block
+    OP_plans[ip].nelems[b] = bs;         // size of block
 
     // loop over indirection sets
 
@@ -686,7 +713,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
         if (inds[m2]==m) {
           for (int e=bs_offset; e<bs_offset+bs; e++)
             work2[ne++] = maps[m2].map[idxs[m2]+e*maps[m2].dim];
-				}
+        }
       }
 
       // sort them, then eliminate duplicates
@@ -865,11 +892,11 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
           }
         }
       }
-			// update bs_offset
-			if(smartpartition)
-				bs_offset += set.partinfo->at(b);
-			else
-				bs_offset += bsize;
+      // update bs_offset
+      if(smartpartition)
+        bs_offset += set.partinfo->at(b);
+      else
+        bs_offset += bsize;
     }
 
     ncolor += 32;   // increment base level

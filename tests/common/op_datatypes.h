@@ -27,45 +27,44 @@
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+
+//
+// OP datatypes
+//
+
 #ifndef OP_DATATYPES
 #define OP_DATATYPES
 
 #include <vector>
 
-
-#ifndef OP_DIAGS
-#define OP_DIAGS 2
-#endif
-
-#ifndef BSIZE
-#define BSIZE 256
-#endif
-
 //
-// enums
+// OP diagnostics level; defined in op_seq.cpp/op_lib.cu and set in op_init
 //
 
-// op_dat_category
+extern int OP_diags;
+
+/*
+   0            none
+   1 or above   error-checking
+   2 or above   info on plan construction
+   3 or above   report execution of parallel loops
+   4 or above   report use of old plans
+   7 or above   report positive checks in op_plan_check
+*/
+
+//
+// enum list for op_par_loop
+//
+
 enum op_access   { OP_READ, OP_WRITE, OP_RW, OP_INC, OP_MIN, OP_MAX };
 
 //
-// OP Method Forward Declaration
+// add in user's datatypes
 //
-void op_init(int, char **);
-void op_decl_const_i(const char* dat, int size, char const *name);
 
-//
-// OP Methods
-//
-template <class T>
-void op_decl_const(int dim, T *dat, char const *name = "")
-{
-  op_decl_const_i((char*)dat, sizeof(T)*dim, name);
-}
-
-//
-// defines
-//
+#ifdef OP_USER_DATATYPES
+#include <OP_USER_DATATYPES>
+#endif
 
 //
 // zero constants
@@ -84,24 +83,6 @@ void op_decl_const(int dim, T *dat, char const *name = "")
 
 // identity mapping
 #define OP_ID op_map()
-
-//
-//  min / max definitions
-//
-#ifndef MIN
-#define MIN(a,b) ((a<b) ? (a) : (b))
-#endif
-
-#ifndef MAX
-#define MAX(a,b) ((a>b) ? (a) : (b))
-#endif
-
-//
-// alignment macro based on example on page 50 of CUDA Programmiinit_as_data(set, dim, (T*)dat, name);ng Guide version 3.0
-// rounds up to nearest multiple of 8 bytes
-//
-
-#define ROUND_UP(bytes) (((bytes) + 7) & ~7)
 
 //
 // structures
@@ -150,9 +131,9 @@ struct op_dat
               size;   // size of each element in dataset
   char       *dat,    // data on host
              *dat_d,  // data on device (GPU)
-						 *dat_t;	// temporary data pointer
-  char const *name;   // name of dataset
-	char const *type;   // datatype
+             *dat_t;  // temporary data pointer
+  char const *type,   // datatype
+             *name;   // name of dataset
 
 public:
   op_dat(op_set set, int dim, void* dat, char const *name = ""){
@@ -217,27 +198,66 @@ typedef struct _op_plan{
   int        *thrcol;   // thread colors
   int        *offset;   // offset for primary set
   int       **ind_maps; // pointers for indirect datasets
-  int       **ind_offs; // offsets for indirect datasets
-  int       **ind_sizes;// sizes for indirect datasets
-  int       **maps;     // regular pointers, renumbered as needed
+  int        *ind_offs; // offsets for indirect datasets
+  int        *ind_sizes;// sizes for indirect datasets
+  short     **maps;     // regular pointers, renumbered as needed
   int        *nelems;   // number of elements in each block
   int         ncolors;  // number of block colors
   int        *ncolblk;  // number of blocks for each color
   int        *blkmap;   // block mapping
   int         nshared;  // bytes of shared memory required
+  float       transfer; // bytes of data transfer per kernel call
+  float       transfer2;// bytes of cache line per kernel call
 } op_plan;
 
+typedef struct {
+  char const *name;     // name of kernel function
+  int         count;    // number of times called
+  float       time;     // total execution time
+  float       transfer; // bytes of data transfer (used)
+  float       transfer2;// bytes of data transfer (total)
+} op_kernel;
 
-void op_fetch_data_i(op_dat<void> *d);
+//
+//  min / max definitions
+//
 
-template <class T>
-void op_fetch_data(op_dat<T> *d)
-{
-  op_fetch_data_i((op_dat<void> *)d);
-}
-
-
-
+#ifndef MIN
+#define MIN(a,b) ((a<b) ? (a) : (b))
+#endif
+#ifndef MAX
+#define MAX(a,b) ((a>b) ? (a) : (b))
 #endif
 
+//
+// alignment macro based on example on page 50 of CUDA Programming Guide version 3.0
+// rounds up to nearest multiple of 16 bytes
+//
+
+#define ROUND_UP(bytes) (((bytes) + 15) & ~15)
+
+//
+// OP function prototypes
+//
+
+void op_init(int, char **, int);
+
+void op_decl_const_i(const char* dat, int size, char const *name);
+
+template <class T>
+void op_decl_const(int dim, T *dat, char const *name = "")
+{
+  op_decl_const_i((char*)dat, sizeof(T)*dim, name);
+}
+
+template <class T>
+void op_fetch_data(op_dat<T>& d);
+
+void op_diagnostic_output();
+
+void op_timing_output();
+
+void op_exit();
+
+#endif
 

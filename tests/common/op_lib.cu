@@ -285,7 +285,8 @@ void mvHostToDevice(T **map, int size) {
 // utility routine to copy dataset back to host
 //
 
-extern void op_fetch_data(op_dat<void>& data) {
+template <class T>
+extern void op_fetch_data(op_dat<T>& data) {
   cutilSafeCall(cudaMemcpy(data.dat, data.dat_d, data.size*data.set.size,
                 cudaMemcpyDeviceToHost));
   cutilSafeCall(cudaThreadSynchronize());

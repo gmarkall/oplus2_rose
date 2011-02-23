@@ -26,6 +26,7 @@ float alpha[2];
 // OP header file
 //
 
+#define OP_USER_DATATYPES <user_defined_types.h>
 #include <op_seq.h>
 
 
@@ -110,7 +111,7 @@ int main(int argc, char **argv){
 
   // OP initialisation
 
-  op_init(argc,argv);
+  op_init(argc,argv,5);
 
   // declare sets, pointers, and datasets
 

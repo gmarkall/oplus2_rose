@@ -55,6 +55,7 @@ myconst air_const = {2.0f, 1.0f};
 // OP header file
 //
 
+#define OP_USER_DATATYPES <user_defined_types.h>
 #include <op_seq.h>
 
 //
@@ -181,7 +182,7 @@ int main(int argc, char **argv){
 
   // OP initialisation
 
-  op_init(argc,argv);
+  op_init(argc,argv,5);
 
   // declare sets, pointers, datasets and global constants
   op_set nodes(nnode, NULL);

@@ -410,16 +410,16 @@ SgFunctionParameterList* OPParLoop::createStandardParameters(op_par_loop_args *p
     nm = buildInitializedName(SgName("ind_arg" + buildStr(i)), argType);
     appendArg(paramList, nm);
 
-    // Add "ind_arg0_maps"
+    // Add "ind_arg0_maps" of type int*
     argType = buildPointerType(buildIntType());
     nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_maps"), argType);
     appendArg(paramList, nm);
 
-    // Add "ind_arg0_sizes"
+    // Add "ind_arg0_sizes" of type int*
     nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_sizes"), argType);
     appendArg(paramList, nm);
   
-    // Add "ind_arg0_offset"
+    // Add "ind_arg0_offset" of type int*
     nm = buildInitializedName(SgName("ind_arg" + buildStr(i) + "_offset"), argType);
     appendArg(paramList, nm);
   }
@@ -431,8 +431,8 @@ SgFunctionParameterList* OPParLoop::createStandardParameters(op_par_loop_args *p
       reduction_required = true;
     if(pl->args[i]->usesIndirection())
     {
-      // Add "arg1_map"
-      argType = buildPointerType(buildIntType());
+      // Add "arg1_map" of type short*
+      argType = buildPointerType(buildShortType());
       nm = buildInitializedName(arg(i) + SgName("_maps"), argType);
       appendArg(paramList, nm);
     }
@@ -501,7 +501,7 @@ void OPParLoop::createSharedVariableDeclarations(op_par_loop_args *pl)
   {
     if(pl->args[i]->usesIndirection())
     {
-      createSharedVariable(arg(i)+"_map", buildPointerType(buildIntType()), kernelBody);
+      createSharedVariable(arg(i)+"_map", buildPointerType(buildShortType()), kernelBody);
     }
     else if(!pl->args[i]->consideredAsConst())
     {
@@ -735,7 +735,7 @@ void OPParLoop::generateSpecialStub(SgFunctionCallExp *fn, string kernel_name, o
 void OPParLoop::createSpecialStubVariables()
 {
   // Declare gridsize and bsize
-  SgExpression *e = buildOpaqueVarRefExp(SgName("BSIZE"));
+  SgExpression *e = buildOpaqueVarRefExp(SgName("OP_block_size"));
   SgVariableDeclaration *varDec = buildVariableDeclaration(SgName("bsize"), buildIntType(), buildAssignInitializer(e));
   appendStatement(varDec, stubBody);
   
@@ -835,7 +835,7 @@ void OPParLoop::createSharedVariableOffsetInitialiser(op_par_loop_args *pl)
 
   // Cache offset[blockId]
   expression = buildOpaqueVarRefExp(SgName("offset[blockId]"));
-  SgVariableDeclaration* varDec = buildVariableDeclaration(SgName("cur_offset"), buildIntType(), buildAssignInitializer(expression), ifBody);
+  SgVariableDeclaration* varDec = buildVariableDeclaration(SgName("cur_offset"), buildShortType(), buildAssignInitializer(expression), ifBody);
   appendStatement(varDec, ifBody);
 
   // Add color variable
@@ -1374,10 +1374,10 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
   appendStatement(varDec,stubBody);
 
   // Add maximum grid size
-  // Example : int gridsize = (set.size - 1) / BSIZE + 1;
+  // Example : int gridsize = (set.size - 1) / OP_block_size + 1;
   SgExpression *expresn = buildOpaqueVarRefExp(SgName("set.size"));
   expresn = buildSubtractOp(expresn, buildIntVal(1));
-  expresn = buildDivideOp(expresn, buildOpaqueVarRefExp(SgName("BSIZE")));
+  expresn = buildDivideOp(expresn, buildOpaqueVarRefExp(SgName("OP_block_size")));
   expresn = buildAddOp(expresn, buildIntVal(1));
   varDec = buildVariableDeclaration(SgName("gridsize"), buildIntType(), buildAssignInitializer(expresn));
   appendStatement(varDec, stubBody);
@@ -1483,9 +1483,9 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
       kPars->append_expression(e);
       e = buildOpaqueVarRefExp(SgName("Plan->ind_maps["+buildStr(i)+"]"));
       kPars->append_expression(e);
-      e = buildOpaqueVarRefExp(SgName("Plan->ind_sizes["+buildStr(i)+"]"));
+      e = buildOpaqueVarRefExp(SgName("Plan->ind_sizes"));
       kPars->append_expression(e);
-      e = buildOpaqueVarRefExp(SgName("Plan->ind_offs["+buildStr(i)+"]"));
+      e = buildOpaqueVarRefExp(SgName("Plan->ind_offs"));
       kPars->append_expression(e);
     }
     // Then add all the pointers
@@ -1523,7 +1523,7 @@ void OPParLoop::generateStandardStub(SgFunctionCallExp *fn, string kernel_name, 
   // We have to add the kernel configuration as part of the function name
   // as CUDA is not directly supported by ROSE - however, I understand
   // that CUDA and OpenCL support is coming soon!
-  SgExprStatement *kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<nblocks,BSIZE,nshared>>>", buildVoidType(), kPars, stubBody);
+  SgExprStatement *kCall = buildFunctionCallStmt("op_cuda_"+kernel_name+"<<<nblocks,OP_block_size,nshared>>>", buildVoidType(), kPars, stubBody);
   appendStatement(kCall,blockLoopBody);
 
   createEndTimerBlock(blockLoopBody, true);
@@ -1674,7 +1674,7 @@ void OPParLoop::preHandleConstAndGlobalData(SgFunctionCallExp *fn, op_par_loop_a
     }
   }
 
-  SgExpression* expShared = buildMultiplyOp( varExp2, buildDivideOp(buildOpaqueVarRefExp(SgName("BSIZE")), buildIntVal(2)) );
+  SgExpression* expShared = buildMultiplyOp( varExp2, buildDivideOp(buildOpaqueVarRefExp(SgName("OP_block_size")), buildIntVal(2)) );
   SgVariableDeclaration* varDec3 = buildVariableDeclaration(SgName("reduct_shared"), buildIntType(), buildAssignInitializer(expShared), stubBody);
   SgName varName3 = isSgVariableDeclaration(varDec2)->get_definition()->get_vardefn()->get_name();  
   appendStatement(varDec3,stubBody);

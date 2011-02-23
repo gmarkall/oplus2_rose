@@ -58,8 +58,8 @@ int OP_set_index =0, OP_set_max =0,    // Index for enumerating sets
     OP_dat_index =0, OP_dat_max =0,    // Index for enumerating dats
     OP_plan_index=0, OP_plan_max=0,    // Index for enumerating plans
     OP_diags     =0,                  // Diagnostic level
-    OP_part_size =0,                  // Partition size
-    OP_block_size=512;                // Block size
+    OP_part_size =0,                  // Partition size (defaults to dynamic)
+    OP_block_size=512,                // Block size
     OP_cache_line_size=128;           // Cache line size
 
 op_set       ** OP_set_list;                // Array holding global sets
@@ -285,10 +285,8 @@ void mvHostToDevice(T **map, int size) {
 // utility routine to copy dataset back to host
 //
 
-template <class T>
-extern void op_fetch_data(op_dat<T>& data) {
-  cutilSafeCall(cudaMemcpy(data.dat, data.dat_d, data.size*data.set.size,
-                cudaMemcpyDeviceToHost));
+void op_fetch_data_i(op_dat<void> *data) {
+  cutilSafeCall(cudaMemcpy(data->dat, data->dat_d, data->size*data->set.size, cudaMemcpyDeviceToHost));
   cutilSafeCall(cudaThreadSynchronize());
 }
 
@@ -524,6 +522,17 @@ void OP_plan_check(op_plan, int, int *,int);
 
 //
 // find existing execution plan, or construct a new one
+// name  - execution plan label
+// set   - op_set to iterate over
+// nargs - number of arguments
+// args  - op_dat arguments (array)
+// idxs  - indices into multi-dimensional mapping (array)
+// maps  - mappings used for indirection (array, OP_ID if no indirection)
+// dims  - dimensions of op_dat arguments (array)
+// accs  - access descriptor for op_dat arguments (array)
+// ninds - number of indirectly accessed datasets
+// inds  - mapping from arguments to indirect datasets (contains an entry
+//         for each argument, -1 if there is no indirection)
 //
 
 extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *args, int *idxs,
@@ -548,6 +557,8 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
     }
     ip++;
   }
+
+  // return existing plan if a match has been found
 
   if (match) {
     ip--;
@@ -591,6 +602,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
   }
 
   // work out worst case shared memory requirement per element
+  // (size of data associated with each set element for indirectly accessed data)
 
   int maxbytes = 0;
   for (int m=0; m<nargs; m++) {
@@ -599,9 +611,12 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
 
   // set blocksize and number of blocks;
   // adaptive size based on 48kB of shared memory
+  // FIXME this assumes Fermi cards with shared memory configured as 48K
 
   int bsize   = OP_part_size;   // blocksize
+  // FIXME what's the default assumption for the size of mini partitions?
   if (bsize==0) bsize = (48*1024/(64*maxbytes))*64;
+  // number of mini partitions
   int nblocks = (set.size-1)/bsize + 1;
 
   // enlarge OP_plans array if needed
@@ -616,12 +631,15 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
     }
   }
 
+  // check if we have a smart partitioning and use it to override the defaults
+
   bool smartpartition = false;
 
   if(set.partinfo != NULL)
   {
     smartpartition = true;
     nblocks = set.partinfo->size();
+    // Block size is the maximum size of any of the mini partitions
     for(int q=0; q<nblocks; q++)
     {
       bsize = MAX(set.partinfo->at(q), bsize);
@@ -646,10 +664,12 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
   OP_plans[ip].ind_sizes = (int *)malloc(nblocks*ninds*sizeof(int));
   OP_plans[ip].maps      = (short **)malloc(nargs*sizeof(short *));
   OP_plans[ip].nelems    = (int *)malloc(nblocks*sizeof(int));
-  OP_plans[ip].ncolblk   = (int *)calloc(set.size,sizeof(int)); // max possibly needed
+  // Worst-case assumption if each element needs a different color
+  OP_plans[ip].ncolblk   = (int *)calloc(set.size,sizeof(int));
   OP_plans[ip].blkmap    = (int *)calloc(nblocks,sizeof(int));
 
   for (int m=0; m<ninds; m++) {
+    // get number of maps pointing to an indirectly accessed data
     int count = 0;
     for (int m2=0; m2<nargs; m2++)
       if (inds[m2]==m) count++;
@@ -672,7 +692,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
     
   OP_plan_index++;
 
-  // allocate working arrays
+  // allocate working arrays for indirections
 
   uint **work;
   work = (uint **)malloc(ninds*sizeof(uint *));
@@ -697,6 +717,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
   int bs_offset = 0;
   for (int b=0; b<nblocks; b++) {
 		
+    // last block can potentially be smaller
     int  bs   = MIN(bsize, set.size - bs_offset);
 		if(smartpartition) bs = set.partinfo->at(b);
 
@@ -750,7 +771,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
         if (inds[m2]==m) {
           for (int e=bs_offset; e<bs_offset+bs; e++)
             OP_plans[ip].maps[m2][e] = work[m][maps[m2].map[idxs[m2]+e*maps[m2].dim]];
-	}
+        }
       }
 
       if (b==0) {
@@ -838,11 +859,11 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
 
     // reorder elements by color?
 
-	// update bs_offset
-	if(smartpartition)
-		bs_offset += set.partinfo->at(b);
-	else
-		bs_offset += bsize;
+    // update bs_offset
+    if(smartpartition)
+      bs_offset += set.partinfo->at(b);
+    else
+      bs_offset += bsize;
   }
 
 
@@ -864,11 +885,11 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
         for (int e=0; e<maps[m].to.size; e++)
           work[inds[m]][e] = 0;               // zero out color arrays
     }
-	bs_offset = 0;
+    bs_offset = 0;
     for (int b=0; b<nblocks; b++) {
       if (blk_col[b] == -1) {          // color not yet assigned to block
         int  bs   = MIN(bsize, set.size - bs_offset);
-				if(smartpartition) bs = set.partinfo->at(b);
+        if(smartpartition) bs = set.partinfo->at(b);
         uint mask = 0;
 
         for (int m=0; m<nargs; m++) {

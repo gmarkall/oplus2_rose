@@ -13,13 +13,13 @@ void op_cuda_save_soln(float *arg0,float *arg1,int set_size)
 }
 
 
-float op_par_loop_save_soln(const char *name,op_set set,struct op_dat<void> *arg0,int idx0,op_ptr *ptr0,enum op_access acc0,struct op_dat<void> *arg1,int idx1,op_ptr *ptr1,enum op_access acc1)
+float op_par_loop_save_soln(const char *name,op_set set,struct op_dat<void> *arg0,int idx0,op_map *map0,enum op_access acc0,struct op_dat<void> *arg1,int idx1,op_map *map1,enum op_access acc1)
 {
-  int bsize = BSIZE;
+  int bsize = OP_block_size;
   int gridsize = (set.size - 1) / bsize + 1;
   int reduct_bytes = 0;
   int reduct_size = 0;
-  int reduct_shared = reduct_size * (BSIZE / 2);
+  int reduct_shared = reduct_size * (OP_block_size / 2);
   int const_bytes = 0;
 cudaEvent_t start, stop;
   float elapsed_time_ms = 0.00000F;

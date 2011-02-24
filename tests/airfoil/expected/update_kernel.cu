@@ -29,15 +29,15 @@ void op_cuda_update_reduction(int gridsize,float *arg4,void *block_reduct4)
 }
 
 
-float op_par_loop_update(const char *name,op_set set,struct op_dat<void> *arg0,int idx0,op_ptr *ptr0,enum op_access acc0,struct op_dat<void> *arg1,int idx1,op_ptr *ptr1,enum op_access acc1,struct op_dat<void> *arg2,int idx2,op_ptr *ptr2,enum op_access acc2,struct op_dat<void> *arg3,int idx3,op_ptr *ptr3,enum op_access acc3,struct op_dat<void> *arg4,int idx4,op_ptr *ptr4,enum op_access acc4)
+float op_par_loop_update(const char *name,op_set set,struct op_dat<void> *arg0,int idx0,op_map *map0,enum op_access acc0,struct op_dat<void> *arg1,int idx1,op_map *map1,enum op_access acc1,struct op_dat<void> *arg2,int idx2,op_map *map2,enum op_access acc2,struct op_dat<void> *arg3,int idx3,op_map *map3,enum op_access acc3,struct op_dat<void> *arg4,int idx4,op_map *map4,enum op_access acc4)
 {
-  int bsize = BSIZE;
+  int bsize = OP_block_size;
   int gridsize = (set.size - 1) / bsize + 1;
   int reduct_bytes = 0;
   int reduct_size = 0;
   reduct_bytes += ROUND_UP(1 * sizeof(float ));
   reduct_size = MAX(reduct_size,sizeof(float ));
-  int reduct_shared = reduct_size * (BSIZE / 2);
+  int reduct_shared = reduct_size * (OP_block_size / 2);
   reallocReductArrays(reduct_bytes);
   reduct_bytes = 0;
   push_op_dat_as_reduct(*arg4,reduct_bytes);

@@ -1,5 +1,7 @@
-#include "op_lib.cu"
-#import "op_datatypes.cpp"
+#define OP_KERNELS_MAX 4
+#include <op_lib.cu>
+#include <user_defined_types.h>
+#import <op_datatypes.cpp>
 __constant__
 float gam;
 __constant__

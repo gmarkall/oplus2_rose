@@ -182,7 +182,8 @@ int main(int argc, char **argv){
 
   // OP initialisation
 
-  op_init(argc,argv,5);
+  // skip the first command line parameter since it's used to select the partitioning
+  op_init(argc,argv+1,5);
 
   // declare sets, pointers, datasets and global constants
   op_set nodes(nnode, NULL);

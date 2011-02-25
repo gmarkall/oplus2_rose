@@ -62,10 +62,10 @@ int OP_set_index =0, OP_set_max =0,    // Index for enumerating sets
     OP_block_size=512,                // Block size
     OP_cache_line_size=128;           // Cache line size
 
-op_set       ** OP_set_list;                // Array holding global sets
-op_map       ** OP_map_list;                // Array holding global maps
-op_dat<void> ** OP_dat_list;                // Array holding global dats
-op_plan       * OP_plans;                   // Array holding global plans
+vector<op_set*>       OP_set_list;                // Array holding global sets
+vector<op_map*>       OP_map_list;                // Array holding global maps
+vector<op_dat<void>*> OP_dat_list;                // Array holding global dats
+vector<op_plan>       OP_plans;                   // Array holding global plans
 op_kernel       OP_kernels[OP_KERNELS_MAX]; // Array holding global kernels
 
 // arrays for global constants and reductions
@@ -134,28 +134,28 @@ void op_decl_const_i(const char* dat, int size, char const *name)
 /// Assign global index to set and add it to the global array of sets
 void fixup_op_set(op_set* set)
 {
-  set->index = OP_set_index;
+  set->index = OP_set_index++;
   
   // Add to the global set list
-  OP_set_list[OP_set_index++] = set;
+  OP_set_list.push_back(set);
 }
 
 /// Assign global index to map and add it to the global array of maps
 void fixup_op_map(op_map* map)
 {
-  map->index = OP_map_index;
+  map->index = OP_map_index++;
  
   // Add to the global map list
-  OP_map_list[OP_map_index++] = map;
+  OP_map_list.push_back(map);
 }
 
 /// Assign global index to dat and add it to the global array of dats
 void fixup_op_dat_data(op_dat<void>* data)
 {
-  data->index = OP_dat_index;
+  data->index = OP_dat_index++;
   
   // Add to the global dat list
-  OP_dat_list[OP_dat_index++] = data;
+  OP_dat_list.push_back(data);
 
   cutilSafeCall(cudaMalloc((void **)&(data->dat_d), data->size*data->set.size));
   cutilSafeCall(cudaMemcpy(data->dat_d, data->dat, data->size*data->set.size, cudaMemcpyHostToDevice));
@@ -621,15 +621,15 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
 
   // enlarge OP_plans array if needed
 
-  if (ip==OP_plan_max) {
-    // printf("allocating more memory for OP_plans \n");
-    OP_plan_max += 10;
-    OP_plans = (op_plan *) realloc(OP_plans,OP_plan_max*sizeof(op_plan));
-    if (OP_plans==NULL) {
-      printf(" op_plan error -- error reallocating memory for OP_plans\n");
-      exit(-1);  
-    }
-  }
+  /*if (ip==OP_plan_max) {*/
+    /*// printf("allocating more memory for OP_plans \n");*/
+    /*OP_plan_max += 10;*/
+    /*OP_plans = (op_plan *) realloc(OP_plans,OP_plan_max*sizeof(op_plan));*/
+    /*if (OP_plans==NULL) {*/
+      /*printf(" op_plan error -- error reallocating memory for OP_plans\n");*/
+      /*exit(-1);  */
+    /*}*/
+  /*}*/
 
   // check if we have a smart partitioning and use it to override the defaults
 
@@ -649,6 +649,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
   printf(" number of blocks = %d\n",nblocks);
 
   // allocate memory for new execution plan and store input arguments
+  OP_plans.push_back(op_plan());
 
   OP_plans[ip].arg_idxs  = (int *)malloc(nargs*sizeof(int));
   OP_plans[ip].idxs      = (int *)malloc(nargs*sizeof(int));

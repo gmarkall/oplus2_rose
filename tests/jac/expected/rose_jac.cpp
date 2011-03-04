@@ -19,7 +19,8 @@ float alpha[2UL];
 //
 // OP header file
 //
-#include "op_seq.h"
+#define OP_USER_DATATYPES <user_defined_types.h>
+#include <op_seq.h>
 //
 // kernel routines for parallel loops
 //
@@ -90,12 +91,12 @@ int main(int argc,char **argv)
     }
   }
 // OP initialisation
-  op_init(argc,argv);
+  op_init(argc,argv,5);
 // declare sets, pointers, and datasets
   op_set nodes((nnode),((0L)),"nodes");
   op_set edges((nedge),((0L)),"edges");
-  op_ptr pedge1((edges),(nodes),1,p1,"pedge1");
-  op_ptr pedge2((edges),(nodes),1,p2,"pedge2");
+  op_map pedge1((edges),(nodes),1,p1,"pedge1");
+  op_map pedge2((edges),(nodes),1,p2,"pedge2");
   struct op_dat< double  > p_A((edges),1,(A),"p_A");
   struct op_dat< float  > p_r((nodes),1,(r),"p_r");
   struct op_dat< float  > p_u((nodes),1,(u),"p_u");

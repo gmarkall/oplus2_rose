@@ -78,7 +78,14 @@ void OPBuild::generateBuildFile()
   
   // Add important files
   cout << "Adding includes and imports" << endl;
+  // Get number of kernels
+  ostringstream s;
+  s << "#define OP_KERNELS_MAX " << pl->cudaFunctionDeclarations.size() << "\n";
+  addTextForUnparser(globalScope, s.str(), AstUnparseAttribute::e_before);
   addTextForUnparser(globalScope, "#include <op_lib.cu>\n", AstUnparseAttribute::e_before);
+  // Include user defined types (contains type needed for shared const variables)
+  // FIXME should this type really be a user defined type if it's needed here?
+  addTextForUnparser(globalScope, "#include <user_defined_types.h>\n", AstUnparseAttribute::e_before);
   addTextForUnparser(globalScope, "#import <op_datatypes.cpp>\n", AstUnparseAttribute::e_before);
   
   // Add shared const variables

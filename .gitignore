@@ -7,3 +7,4 @@ tests/jac/jac
 tests/*/blank.cpp
 translator/op2rose
 *.o
+tests/*/test.log

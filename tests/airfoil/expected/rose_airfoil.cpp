@@ -48,12 +48,13 @@ float cfl;
 float eps;
 float mach;
 float alpha;
-#include "user_defined_types.h"
+#include <user_defined_types.h>
 myconst air_const = {(2.0f), (1.0f)};
 //
 // OP header file
 //
-#include "op_seq.h"
+#define OP_USER_DATATYPES <user_defined_types.h>
+#include <op_seq.h>
 //
 // kernel routines for parallel loops
 //
@@ -162,14 +163,14 @@ int main(int argc,char **argv)
   for (int n = 0; n < (4 * ncell); n++) 
     res[n] = (0.0);
 // OP initialisation
-  op_init(argc,argv);
+  op_init(argc,argv,5);
 // declare sets, pointers, datasets and global constants
   op_set nodes((nnode),((0L)),"nodes");
   op_set edges((nedge),&edge_part_info,"edges");
   op_set cells((ncell),((0L)),"cells");
-  op_ptr pedge((edges),(nodes),2,edge,"pedge");
-  op_ptr pecell((edges),(cells),2,ecell,"pecell2");
-  op_ptr pcell((cells),(nodes),4,cell,"pcell");
+  op_map pedge((edges),(nodes),2,edge,"pedge");
+  op_map pecell((edges),(cells),2,ecell,"pecell2");
+  op_map pcell((cells),(nodes),4,cell,"pcell");
   struct op_dat< int  > p_boun((edges),1,(boun),"pp_boun");
   struct op_dat< float  > p_x((nodes),2,(x),"p_x");
   struct op_dat< float  > p_q((cells),4,(q),"p_q");

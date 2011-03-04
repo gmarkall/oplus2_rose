@@ -36,10 +36,13 @@
 #include <string.h>                                                         
 #include <math.h>                                                           
 
+#ifndef OP_x86
 #include <cutil_inline.h>
 #include <math_constants.h>
-#include "user_defined_types.h"
+#endif
+
 #include "op_datatypes.h"
+#include "timers.h"
 #include <vector>
 
 using namespace std;
@@ -48,62 +51,117 @@ using namespace std;
 // global variables
 //
 
-int OP_set_index=0,
-    OP_map_index=0,
-    OP_dat_index=0,
-    OP_nplans   =0;
+#define OP_WARPSIZE 32
 
-op_set         * OP_set_list[10];
-op_map         * OP_map_list[10];
-op_dat<void>   * OP_dat_list[10];
-op_plan            OP_plans[100];
+int OP_set_index =0, OP_set_max =0,    // Index for enumerating sets
+    OP_map_index =0, OP_map_max =0,    // Index for enumerating maps
+    OP_dat_index =0, OP_dat_max =0,    // Index for enumerating dats
+    OP_plan_index=0, OP_plan_max=0,    // Index for enumerating plans
+    OP_diags     =0,                  // Diagnostic level
+    OP_part_size =0,                  // Partition size (defaults to dynamic)
+    OP_block_size=512,                // Block size
+    OP_cache_line_size=128;           // Cache line size
+
+vector<op_set*>       OP_set_list;                // Array holding global sets
+vector<op_map*>       OP_map_list;                // Array holding global maps
+vector<op_dat<void>*> OP_dat_list;                // Array holding global dats
+vector<op_plan>       OP_plans;                   // Array holding global plans
+op_kernel       OP_kernels[OP_KERNELS_MAX]; // Array holding global kernels
 
 // arrays for global constants and reductions
 
 int   OP_consts_bytes=0,    OP_reduct_bytes=0;
 char *OP_consts_h, *OP_consts_d, *OP_reduct_h, *OP_reduct_d;
 
+
 //
 // OP functions
 //
 
-void op_init(int argc, char **argv){
+// Initialise OP2 environment (initialises GPU)
+void op_init(int argc, char **argv, int diags){
   cutilDeviceInit(argc, argv);
+  OP_diags = diags;
+
+#ifdef OP_BLOCK_SIZE
+  OP_block_size = OP_BLOCK_SIZE;
+#endif
+#ifdef OP_PART_SIZE
+  OP_part_size = OP_PART_SIZE;
+#endif
+
+  for (int n=1; n<argc; n++) {
+    if (strncmp(argv[n],"OP_BLOCK_SIZE=",14)==0) {
+      OP_block_size = atoi(argv[n]+14);
+      printf("\n OP_block_size = %d \n", OP_block_size);
+    }
+    if (strncmp(argv[n],"OP_PART_SIZE=",13)==0) {
+      OP_part_size = atoi(argv[n]+13);
+      printf("\n OP_part_size  = %d \n", OP_part_size);
+    }
+    if (strncmp(argv[n],"OP_CACHE_LINE_SIZE=",19)==0) {
+      OP_cache_line_size = atoi(argv[n]+19);
+      printf("\n OP_cache_line_size  = %d \n", OP_cache_line_size);
+    }
+  }
+
+#ifndef OP_x86
+  #if CUDART_VERSION < 3020
+    #error : "must be compiled using CUDA 3.2 or later"
+  #endif
+
+  #ifdef CUDA_NO_SM_13_DOUBLE_INTRINSICS
+    #warning : " *** no support for double precision arithmetic *** "
+  #endif
+
+  cutilSafeCall(cudaThreadSetCacheConfig(cudaFuncCachePreferShared));
+  printf("\n 16/48 L1/shared \n");
+#endif
+
+  for (int n=0; n<OP_KERNELS_MAX; n++) {
+    OP_kernels[n].count     = 0;
+    OP_kernels[n].transfer  = 0.0f;
+    OP_kernels[n].transfer2 = 0.0f;
+  }
 }
 
+/// Declare a constant and upload to GPU memory
 void op_decl_const_i(const char* dat, int size, char const *name)
 {
-  // printf(" op_decl_const: name = %s, size = %d\n",name,sizeof(T)*dim);
   cutilSafeCall( cudaMemcpyToSymbol(name, dat, size) );
 }
 
+/// Assign global index to set and add it to the global array of sets
 void fixup_op_set(op_set* set)
 {
-  set->index = OP_set_index;
+  set->index = OP_set_index++;
   
   // Add to the global set list
-  OP_set_list[OP_set_index++] = set;
+  OP_set_list.push_back(set);
 }
 
+/// Assign global index to map and add it to the global array of maps
 void fixup_op_map(op_map* map)
 {
-  map->index = OP_map_index;
+  map->index = OP_map_index++;
  
   // Add to the global map list
-  OP_map_list[OP_map_index++] = map;
+  OP_map_list.push_back(map);
 }
 
+/// Assign global index to dat and add it to the global array of dats
 void fixup_op_dat_data(op_dat<void>* data)
 {
-  data->index = OP_dat_index;
+  data->index = OP_dat_index++;
   
   // Add to the global dat list
-  OP_dat_list[OP_dat_index++] = data;
+  OP_dat_list.push_back(data);
 
   cutilSafeCall(cudaMalloc((void **)&(data->dat_d), data->size*data->set.size));
   cutilSafeCall(cudaMemcpy(data->dat_d, data->dat, data->size*data->set.size, cudaMemcpyHostToDevice));
 }
 
+/// FIXME what's this for?
 void push_op_dat_as_const(op_dat<void>& data, int offset_bytes)
 {
   data.dat   = OP_consts_h + offset_bytes;                                                  
@@ -111,6 +169,7 @@ void push_op_dat_as_const(op_dat<void>& data, int offset_bytes)
   memcpy(data.dat, data.dat_t, data.size);
 }
 
+/// FIXME what's this for?
 void push_op_dat_as_reduct(op_dat<void>& data, int offset_bytes)
 {
   data.dat   = OP_reduct_h + offset_bytes;
@@ -118,15 +177,16 @@ void push_op_dat_as_reduct(op_dat<void>& data, int offset_bytes)
   memcpy(data.dat, data.dat_t, data.size);
 }
 
+/// FIXME what's this for?
 void pop_op_dat_as_reduct(op_dat<void>& data)
 {
   memcpy(data.dat_t, data.dat, data.size);
 }
 
 
-
+/// Print statistics of declared sets, maps, dats
 void op_diagnostic_output(){
-  if (OP_DIAGS > 1) {
+  if (OP_diags > 1) {
     printf("\n  OP diagnostic output\n");
     printf(  "  --------------------\n");
 
@@ -154,6 +214,30 @@ void op_diagnostic_output(){
   }
 }
 
+/// Print timing and bandwidth statistics for kernel invocations
+void op_timing_output() {
+  printf("\n  count     time     GB/s     GB/s   kernel name ");
+  printf("\n ----------------------------------------------- \n");
+  for (int n=0; n<OP_KERNELS_MAX; n++) {
+    if (OP_kernels[n].count>0) {
+      if (OP_kernels[n].transfer2==0.0f)
+        printf(" %6d  %8.4f %8.4f            %s \n",
+	     OP_kernels[n].count,
+             OP_kernels[n].time,
+             OP_kernels[n].transfer/(1e9f*OP_kernels[n].time),
+             OP_kernels[n].name);
+      else
+        printf(" %6d  %8.4f %8.4f %8.4f   %s \n",
+	     OP_kernels[n].count,
+             OP_kernels[n].time,
+             OP_kernels[n].transfer/(1e9f*OP_kernels[n].time),
+             OP_kernels[n].transfer2/(1e9f*OP_kernels[n].time),
+             OP_kernels[n].name);
+    }
+  }
+}
+
+/// Finalise OP2 environment (does nothing)
 void op_exit(){
 }
 
@@ -162,7 +246,7 @@ void op_exit(){
 // comparison function for integer quicksort
 //
 
-int compare(const void *a2, const void *b2) {
+int comp(const void *a2, const void *b2) {
   int *a = (int *)a2;
   int *b = (int *)b2;
 
@@ -175,25 +259,32 @@ int compare(const void *a2, const void *b2) {
       return 1;
 }
 
+
 //
-// utility routine to move arrays to GPU device
+// next few routines are CUDA-specific
 //
 
 #ifndef OP_x86
 
+//
+// utility routine to move arrays to GPU device
+//
+
 template <class T>
-void mvHostToDevice(T **ptr, int size) {
+void mvHostToDevice(T **map, int size) {
   T *tmp;
   cutilSafeCall(cudaMalloc((void **)&tmp, size));
-  cutilSafeCall(cudaMemcpy(tmp, *ptr, size, cudaMemcpyHostToDevice));
-  free(*ptr);
-  *ptr = tmp;
+  cutilSafeCall(cudaMemcpy(tmp, *map, size, cudaMemcpyHostToDevice));
+  cutilSafeCall(cudaThreadSynchronize());
+  free(*map);
+  *map = tmp;
 }
 
 
 //
 // utility routine to copy dataset back to host
 //
+
 void op_fetch_data_i(op_dat<void> *data) {
   cutilSafeCall(cudaMemcpy(data->dat, data->dat_d, data->size*data->set.size, cudaMemcpyDeviceToHost));
   cutilSafeCall(cudaThreadSynchronize());
@@ -205,23 +296,28 @@ void op_fetch_data_i(op_dat<void> *data) {
 //
 
 void reallocConstArrays(int consts_bytes) {
-  if (OP_consts_bytes>0) {
-    free(OP_consts_h);
-    cutilSafeCall(cudaFree(OP_consts_d));
+  if (consts_bytes>OP_consts_bytes) {
+    if (OP_consts_bytes>0) {
+      free(OP_consts_h);
+      cutilSafeCall(cudaFree(OP_consts_d));
+    }
+    OP_consts_bytes = 4*consts_bytes;
+    OP_consts_h = (char *) malloc(OP_consts_bytes);
+    cutilSafeCall(cudaMalloc((void **)&OP_consts_d, OP_consts_bytes));
   }
-  OP_consts_bytes = 4*consts_bytes;
-  OP_consts_h = (char *) malloc(OP_consts_bytes);
-  cutilSafeCall(cudaMalloc((void **)&OP_consts_d, OP_consts_bytes));
 }
 
 void reallocReductArrays(int reduct_bytes) {
-  if (OP_reduct_bytes>0) {
-    free(OP_reduct_h);
-    cutilSafeCall(cudaFree(OP_reduct_d));
+  if (reduct_bytes>OP_reduct_bytes) {
+    if (OP_reduct_bytes>0) {
+      free(OP_reduct_h);
+      cutilSafeCall(cudaFree(OP_reduct_d));
+    }
+    OP_reduct_bytes = 4*reduct_bytes;
+    OP_reduct_h = (char *) malloc(OP_reduct_bytes);
+    cutilSafeCall(cudaMalloc((void **)&OP_reduct_d, OP_reduct_bytes));
+    // printf("\n allocated %d bytes for reduction arrays \n",OP_reduct_bytes);
   }
-  OP_reduct_bytes = 4*reduct_bytes;
-  OP_reduct_h = (char *) malloc(OP_reduct_bytes);
-  cutilSafeCall(cudaMalloc((void **)&OP_reduct_d, OP_reduct_bytes));
 }
 
 //
@@ -231,23 +327,28 @@ void reallocReductArrays(int reduct_bytes) {
 void mvConstArraysToDevice(int consts_bytes) {
   cutilSafeCall(cudaMemcpy(OP_consts_d, OP_consts_h, consts_bytes,
                 cudaMemcpyHostToDevice));
+  cutilSafeCall(cudaThreadSynchronize());
 }
 
 void mvReductArraysToDevice(int reduct_bytes) {
   cutilSafeCall(cudaMemcpy(OP_reduct_d, OP_reduct_h, reduct_bytes,
                 cudaMemcpyHostToDevice));
+  cutilSafeCall(cudaThreadSynchronize());
 }
 
 void mvReductArraysToHost(int reduct_bytes) {
   cutilSafeCall(cudaMemcpy(OP_reduct_h, OP_reduct_d, reduct_bytes,
                 cudaMemcpyDeviceToHost));
+  cutilSafeCall(cudaThreadSynchronize());
 }
 
 
 //
 // reduction routine for arbitrary datatypes
 //
+
 __device__ int OP_reduct_lock=0;  // important: must be initialised to 0
+
 
 template < op_access reduction, class T >
 __inline__ __device__ void op_reduction(volatile T *dat_g, T dat_l)
@@ -256,26 +357,14 @@ __inline__ __device__ void op_reduction(volatile T *dat_g, T dat_l)
   int d   = blockDim.x>>1; 
   extern __shared__ T temp[];
 
-  if (tid>=d) temp[tid-d] = dat_l;
-  __syncthreads();
+  __syncthreads();  // important to finish all previous activity
 
-  if (tid<d) {
-    switch (reduction) {
-    case OP_INC:
-      temp[tid] = temp[tid] + dat_l;
-      break;
-    case OP_MIN:
-      if(dat_l<temp[tid]) temp[tid] = dat_l;
-      break;
-    case OP_MAX:
-      if(dat_l>temp[tid]) temp[tid] = dat_l;
-      break;
-    }
-  }
+  temp[tid] = dat_l;
 
-  for (d>>=1; d>warpSize; d>>=1) {
+  for (; d>warpSize; d>>=1) {
     __syncthreads();
     if (tid<d) {
+      // this should be optimised out by the compiler (template parameter)
       switch (reduction) {
       case OP_INC:
         temp[tid] = temp[tid] + temp[tid+d];
@@ -292,40 +381,45 @@ __inline__ __device__ void op_reduction(volatile T *dat_g, T dat_l)
 
   __syncthreads();
 
-  if (tid<warpSize)
-    for (; d>0; d>>=1)
-      switch (reduction) {
-      case OP_INC:
-        temp[tid] = temp[tid] + temp[tid+d];
-        break;
-      case OP_MIN:
-        if(temp[tid+d]<temp[tid]) temp[tid] = temp[tid+d];
-        break;
-      case OP_MAX:
-        if(temp[tid+d]>temp[tid]) temp[tid] = temp[tid+d];
-        break;
+  volatile T *vtemp = temp;   // see Fermi compatibility guide 
+
+  if (tid<warpSize) {
+    for (; d>0; d>>=1) {
+      if (tid<d) {
+        switch (reduction) {
+        case OP_INC:
+          vtemp[tid] = vtemp[tid] + vtemp[tid+d];
+          break;
+        case OP_MIN:
+          if(vtemp[tid+d]<vtemp[tid]) vtemp[tid] = vtemp[tid+d];
+          break;
+        case OP_MAX:
+          if(vtemp[tid+d]>vtemp[tid]) vtemp[tid] = vtemp[tid+d];
+          break;
+        }
       }
+    }
+  }
 
   if (tid==0) {
-    do {} while(atomicCAS(&OP_reduct_lock,0,1));  // set lock
+    // do {} while(atomicCAS(&OP_reduct_lock,0,1));  // set lock
 
     switch (reduction) {
     case OP_INC:
-      *dat_g = *dat_g + temp[0];
+      *dat_g = *dat_g + vtemp[0];
       break;
     case OP_MIN:
-      if(temp[0]<*dat_g) *dat_g = temp[0];
+      if(temp[0]<*dat_g) *dat_g = vtemp[0];
       break;
     case OP_MAX:
-      if(temp[0]>*dat_g) *dat_g = temp[0];
+      if(temp[0]>*dat_g) *dat_g = vtemp[0];
       break;
     }
 
-    __threadfence();                // ensure *dat_g update complete
-    OP_reduct_lock = 0;             // free lock
+    // __threadfence();                // ensure *dat_g update complete
+    // OP_reduct_lock = 0;             // free lock
   }
 
-  __syncthreads();  // important to finish one reduction before the next
 }
 
 template < op_access reduction >
@@ -428,6 +522,17 @@ void OP_plan_check(op_plan, int, int *,int);
 
 //
 // find existing execution plan, or construct a new one
+// name  - execution plan label
+// set   - op_set to iterate over
+// nargs - number of arguments
+// args  - op_dat arguments (array)
+// idxs  - indices into multi-dimensional mapping (array)
+// maps  - mappings used for indirection (array, OP_ID if no indirection)
+// dims  - dimensions of op_dat arguments (array)
+// accs  - access descriptor for op_dat arguments (array)
+// ninds - number of indirectly accessed datasets
+// inds  - mapping from arguments to indirect datasets (contains an entry
+//         for each argument, -1 if there is no indirection)
 //
 
 extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *args, int *idxs,
@@ -437,7 +542,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
 
   int ip=0, match=0;
 
-  while (match==0 && ip<OP_nplans) {
+  while (match==0 && ip<OP_plan_index) {
     if ( (strcmp(name,        OP_plans[ip].name)==0)
              && (set.index == OP_plans[ip].set_index)
              && (nargs     == OP_plans[ip].nargs) ) {
@@ -453,23 +558,25 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
     ip++;
   }
 
+  // return existing plan if a match has been found
+
   if (match) {
     ip--;
-    if (OP_DIAGS > 1) printf(" old execution plan #%d\n",ip);
+    if (OP_diags > 3) printf(" old execution plan #%d\n",ip);
     return &(OP_plans[ip]);
   }
   else {
-    if (OP_DIAGS > 1) printf(" new execution plan #%d\n",ip);
+    if (OP_diags > 1) printf(" new execution plan #%d for kernel %s\n",ip,name);
   }
 
   // consistency checks
 
-  if (OP_DIAGS > 0) {
+  if (OP_diags > 0) {
     for (int m=0; m<nargs; m++) {
       if (idxs[m] == -1) {
         //if (maps[m].index != -1) {
         if (maps[m].map != NULL) {
-          printf("error2: wrong pointer for arg %d in kernel \"%s\"\n",m,name);
+          printf("error2: wrong mapping for arg %d in kernel \"%s\"\n",m,name);
           printf("maps[m].index = %d\n",maps[m].index);
           printf("maps[m].name  = %s\n",maps[m].name);
           exit(1);
@@ -478,12 +585,12 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
       else {
         if (set.index         != maps[m].from.index ||
             args[m].set.index != maps[m].to.index) {
-          printf("error: wrong pointer for arg %d in kernel \"%s\"\n",m,name);
+          printf("error: wrong mapping for arg %d in kernel \"%s\"\n",m,name);
           exit(1);
         }
         if (maps[m].dim <= idxs[m]) {
           printf(" %d %d",maps[m].dim,idxs[m]);
-          printf("error: invalid pointer index for arg %d in kernel \"%s\"\n",m,name);
+          printf("error: invalid mapping index for arg %d in kernel \"%s\"\n",m,name);
           exit(1);
         }
       }
@@ -494,24 +601,55 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
     }
   }
 
-  // set blocksize and number of blocks
-  int bsize   = 256;   // blocksize
-  int nblocks = (set.size-1)/bsize + 1;
-	bool smartpartition = false;	
+  // work out worst case shared memory requirement per element
+  // (size of data associated with each set element for indirectly accessed data)
 
-	if(set.partinfo != NULL)
-	{
-		smartpartition = true;
-		nblocks = set.partinfo->size();
-		for(int q=0; q<nblocks; q++)
-		{
-			bsize = MAX(set.partinfo->at(q), bsize);
-		}
-	}
+  int maxbytes = 0;
+  for (int m=0; m<nargs; m++) {
+    if (inds[m]>=0) maxbytes += args[m].size;
+  }
+
+  // set blocksize and number of blocks;
+  // adaptive size based on 48kB of shared memory
+  // FIXME this assumes Fermi cards with shared memory configured as 48K
+
+  int bsize   = OP_part_size;   // blocksize
+  // FIXME what's the default assumption for the size of mini partitions?
+  if (bsize==0) bsize = (48*1024/(64*maxbytes))*64;
+  // number of mini partitions
+  int nblocks = (set.size-1)/bsize + 1;
+
+  // enlarge OP_plans array if needed
+
+  /*if (ip==OP_plan_max) {*/
+    /*// printf("allocating more memory for OP_plans \n");*/
+    /*OP_plan_max += 10;*/
+    /*OP_plans = (op_plan *) realloc(OP_plans,OP_plan_max*sizeof(op_plan));*/
+    /*if (OP_plans==NULL) {*/
+      /*printf(" op_plan error -- error reallocating memory for OP_plans\n");*/
+      /*exit(-1);  */
+    /*}*/
+  /*}*/
+
+  // check if we have a smart partitioning and use it to override the defaults
+
+  bool smartpartition = false;
+
+  if(set.partinfo != NULL)
+  {
+    smartpartition = true;
+    nblocks = set.partinfo->size();
+    // Block size is the maximum size of any of the mini partitions
+    for(int q=0; q<nblocks; q++)
+    {
+      bsize = MAX(set.partinfo->at(q), bsize);
+    }
+  }
 	
   printf(" number of blocks = %d\n",nblocks);
 
   // allocate memory for new execution plan and store input arguments
+  OP_plans.push_back(op_plan());
 
   OP_plans[ip].arg_idxs  = (int *)malloc(nargs*sizeof(int));
   OP_plans[ip].idxs      = (int *)malloc(nargs*sizeof(int));
@@ -520,27 +658,27 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
   OP_plans[ip].accs      = (op_access *)malloc(nargs*sizeof(op_access));
 
   OP_plans[ip].nthrcol   = (int *)malloc(nblocks*sizeof(int));
-  OP_plans[ip].thrcol    = (int *)calloc(set.size,sizeof(int));
+  OP_plans[ip].thrcol    = (int *)malloc(set.size*sizeof(int));
   OP_plans[ip].offset    = (int *)malloc(nblocks*sizeof(int));
   OP_plans[ip].ind_maps  = (int **)malloc(ninds*sizeof(int *));
-  OP_plans[ip].ind_offs  = (int **)malloc(ninds*sizeof(int *));
-  OP_plans[ip].ind_sizes = (int **)malloc(ninds*sizeof(int *));
-  OP_plans[ip].maps      = (int **)malloc(nargs*sizeof(int *));
+  OP_plans[ip].ind_offs  = (int *)malloc(nblocks*ninds*sizeof(int));
+  OP_plans[ip].ind_sizes = (int *)malloc(nblocks*ninds*sizeof(int));
+  OP_plans[ip].maps      = (short **)malloc(nargs*sizeof(short *));
   OP_plans[ip].nelems    = (int *)malloc(nblocks*sizeof(int));
-  OP_plans[ip].ncolblk   = (int *)calloc(set.size,sizeof(int)); // max possibly needed
+  // Worst-case assumption if each element needs a different color
+  OP_plans[ip].ncolblk   = (int *)calloc(set.size,sizeof(int));
   OP_plans[ip].blkmap    = (int *)calloc(nblocks,sizeof(int));
 
   for (int m=0; m<ninds; m++) {
+    // get number of maps pointing to an indirectly accessed data
     int count = 0;
     for (int m2=0; m2<nargs; m2++)
       if (inds[m2]==m) count++;
     OP_plans[ip].ind_maps[m]  = (int *)malloc(count*set.size*sizeof(int));
-    OP_plans[ip].ind_offs[m]  = (int *)malloc(nblocks*sizeof(int));
-    OP_plans[ip].ind_sizes[m] = (int *)malloc(nblocks*sizeof(int));
   }
 
   for (int m=0; m<nargs; m++) {
-    OP_plans[ip].maps[m]     = (int *)malloc(set.size*sizeof(int));
+    OP_plans[ip].maps[m]     = (short *)malloc(set.size*sizeof(short));
 
     OP_plans[ip].arg_idxs[m] = args[m].index;
     OP_plans[ip].idxs[m]     = idxs[m];
@@ -553,9 +691,9 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
   OP_plans[ip].set_index = set.index;
   OP_plans[ip].nargs     = nargs;
     
-  OP_nplans++;
+  OP_plan_index++;
 
-  // allocate working arrays
+  // allocate working arrays for indirections
 
   uint **work;
   work = (uint **)malloc(ninds*sizeof(uint *));
@@ -574,15 +712,18 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
 
   int *nindirect;
   nindirect = (int *)calloc(ninds,sizeof(int));  // total number of indirect elements
-	
-	int bs_offset = 0;
+
+  float total_colors = 0;
+
+  int bs_offset = 0;
   for (int b=0; b<nblocks; b++) {
 		
+    // last block can potentially be smaller
     int  bs   = MIN(bsize, set.size - bs_offset);
 		if(smartpartition) bs = set.partinfo->at(b);
 
-    OP_plans[ip].offset[b] = bs_offset;    // offset for block
-    OP_plans[ip].nelems[b] = bs;         			// size of block
+    OP_plans[ip].offset[b] = bs_offset;  // offset for block
+    OP_plans[ip].nelems[b] = bs;         // size of block
 
     // loop over indirection sets
 
@@ -595,12 +736,12 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
         if (inds[m2]==m) {
           for (int e=bs_offset; e<bs_offset+bs; e++)
             work2[ne++] = maps[m2].map[idxs[m2]+e*maps[m2].dim];
-				}
+        }
       }
 
       // sort them, then eliminate duplicates
 
-      qsort(work2,ne,sizeof(int),compare);
+      qsort(work2,ne,sizeof(int),comp);
         
       int e = 0;
       int p = 0;
@@ -612,14 +753,15 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
       ne = e;  // number of distinct elements
 
       /*
-      if (OP_DIAGS > 5) {
+      if (OP_diags > 5) {
         printf(" indirection set %d: ",m);
         for (int e=0; e<ne; e++) printf(" %d",work2[e]);
         printf(" \n");
       }
       */
 
-      // store mapping and renumbered pointers in execution plan
+
+      // store mapping and renumbered mappings in execution plan
 
       for (int e=0; e<ne; e++) {
         OP_plans[ip].ind_maps[m][nindirect[m]++] = work2[e];
@@ -630,27 +772,28 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
         if (inds[m2]==m) {
           for (int e=bs_offset; e<bs_offset+bs; e++)
             OP_plans[ip].maps[m2][e] = work[m][maps[m2].map[idxs[m2]+e*maps[m2].dim]];
-	}
+        }
       }
 
       if (b==0) {
-        OP_plans[ip].ind_offs[m][b]  = 0;
-        OP_plans[ip].ind_sizes[m][b] = nindirect[m];
+        OP_plans[ip].ind_offs[m+b*ninds]  = 0;
+        OP_plans[ip].ind_sizes[m+b*ninds] = nindirect[m];
       }
       else {
-        OP_plans[ip].ind_offs[m][b]  = OP_plans[ip].ind_offs[m][b-1]
-                                     + OP_plans[ip].ind_sizes[m][b-1];
-        OP_plans[ip].ind_sizes[m][b] = nindirect[m] - OP_plans[ip].ind_offs[m][b];
+        OP_plans[ip].ind_offs[m+b*ninds]  = OP_plans[ip].ind_offs[m+(b-1)*ninds]
+                                          + OP_plans[ip].ind_sizes[m+(b-1)*ninds];
+        OP_plans[ip].ind_sizes[m+b*ninds] = nindirect[m]
+                                          - OP_plans[ip].ind_offs[m+b*ninds];
       }
     }
 
 
-    // print out re-numbered pointers
+    // print out re-numbered mappings
 
     /*
     for (int m=0; m<nargs; m++) {
       if (inds[m]>=0) {
-        printf(" pointer table %d\n",m);
+        printf(" mapping table %d\n",m);
         for (int e=0; e<set.size; e++)
           printf(" map = %d\n",OP_plans[ip].maps[m][e]);
       }
@@ -659,13 +802,17 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
     for (int m=0; m<ninds; m++) {
       printf(" indirect set %d\n",m);
       for (int b=0; b<nblocks; b++) {
-        printf("OP_plans[ip].ind_sizes[m][b] = %d\n", OP_plans[ip].ind_sizes[m][b]);
-        printf("OP_plans[ip].ind_offs[m][b] = %d\n", OP_plans[ip].ind_offs[m][b]);
+        printf("OP_plans[ip].ind_sizes[m+b*ninds] = %d\n",
+                OP_plans[ip].ind_sizes[m+b*ninds]);
+        printf("OP_plans[ip].ind_offs[m+b*ninds] = %d\n",
+                OP_plans[ip].ind_offs[m+b*ninds]);
       }
     }
     */
 
     // now colour main set elements
+
+    for (int e=b*bsize; e<b*bsize+bs; e++) OP_plans[ip].thrcol[e]=-1;
 
     int repeat  = 1;
     int ncolor  = 0;
@@ -681,7 +828,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
       }
 
       for (int e=bs_offset; e<bs_offset+bs; e++) {
-        if (OP_plans[ip].thrcol[e]==0) {
+        if (OP_plans[ip].thrcol[e] == -1) {
           int mask = 0;
           for (int m=0; m<nargs; m++)
             if (inds[m]>=0 && accs[m]==OP_INC)
@@ -707,27 +854,30 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
     }
 
     OP_plans[ip].nthrcol[b] = ncolors;  // number of thread colors in this block
+    total_colors += ncolors;
+
+    // if(ncolors>1) printf(" number of colors in this block = %d \n",ncolors);
 
     // reorder elements by color?
-		
 
-		// update bs_offset
-		if(smartpartition)
-			bs_offset += set.partinfo->at(b);
-		else
-			bs_offset += bsize;
+    // update bs_offset
+    if(smartpartition)
+      bs_offset += set.partinfo->at(b);
+    else
+      bs_offset += bsize;
   }
 
 
   // colour the blocks, after initialising colors to 0
-	
+
   int *blk_col;
-  blk_col = (int *)calloc(nblocks,sizeof(int));
+  blk_col = (int *) malloc(nblocks*sizeof(int));
+  for (int b=0; b<nblocks; b++) blk_col[b] = -1;
 
   int repeat  = 1;
   int ncolor  = 0;
   int ncolors = 0;
-	
+
   while (repeat) {
     repeat = 0;
 
@@ -736,15 +886,15 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
         for (int e=0; e<maps[m].to.size; e++)
           work[inds[m]][e] = 0;               // zero out color arrays
     }
-		bs_offset = 0;
+    bs_offset = 0;
     for (int b=0; b<nblocks; b++) {
-      if (blk_col[b] == 0) {          // color not yet assigned to block
+      if (blk_col[b] == -1) {          // color not yet assigned to block
         int  bs   = MIN(bsize, set.size - bs_offset);
-				if(smartpartition) bs = set.partinfo->at(b);
+        if(smartpartition) bs = set.partinfo->at(b);
         uint mask = 0;
 
         for (int m=0; m<nargs; m++) {
-          if (inds[m]>=0) 
+          if (inds[m]>=0 && accs[m]==OP_INC) 
             for (int e=bs_offset; e<bs_offset+bs; e++)
               mask |= work[inds[m]][maps[m].map[idxs[m]+e*maps[m].dim]]; // set bits of mask
         }
@@ -759,22 +909,21 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
           ncolors = MAX(ncolors, ncolor+color+1);
 
           for (int m=0; m<nargs; m++) {
-            if (inds[m]>=0)
+            if (inds[m]>=0 && accs[m]==OP_INC)
               for (int e=bs_offset; e<bs_offset+bs; e++)
                 work[inds[m]][maps[m].map[idxs[m]+e*maps[m].dim]] |= mask;
           }
         }
       }
-			// update bs_offset
-			if(smartpartition)
-				bs_offset += set.partinfo->at(b);
-			else
-				bs_offset += bsize;
+      // update bs_offset
+      if(smartpartition)
+        bs_offset += set.partinfo->at(b);
+      else
+        bs_offset += bsize;
     }
 
     ncolor += 32;   // increment base level
   }
-
 
   // store block mapping and number of blocks per color
 
@@ -808,6 +957,7 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
   // work out shared memory requirements
 
   OP_plans[ip].nshared = 0;
+  float total_shared = 0;
 
   for (int b=0; b<nblocks; b++) {
     int nbytes = 0;
@@ -815,13 +965,76 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
       int m2 = 0;
       while(inds[m2]!=m) m2++;
 
-      nbytes += ROUND_UP(OP_plans[ip].ind_sizes[m][b]*args[m2].size);
+      nbytes += ROUND_UP(OP_plans[ip].ind_sizes[m+b*ninds]*args[m2].size);
     }
     OP_plans[ip].nshared = MAX(OP_plans[ip].nshared,nbytes);
+    total_shared += nbytes;
   }
 
-  // printf(" shared memory = %d bytes \n",OP_plans[ip].nshared);
+  // work out total bandwidth requirements
 
+  OP_plans[ip].transfer  = 0;
+  OP_plans[ip].transfer2 = 0;
+
+  for (int b=0; b<nblocks; b++) {
+    for (int m=0; m<nargs; m++) {
+      if (inds[m]<0) {
+        float fac = 2.0f;
+        if (accs[m]==OP_READ) fac = 1.0f;
+        OP_plans[ip].transfer  += fac*OP_plans[ip].nelems[b]*args[m].size;
+        OP_plans[ip].transfer2 += fac*OP_plans[ip].nelems[b]*args[m].size;
+      }
+      else {
+        OP_plans[ip].transfer  += OP_plans[ip].nelems[b]*sizeof(short);
+        OP_plans[ip].transfer2 += OP_plans[ip].nelems[b]*sizeof(short);
+      }
+    }
+    for (int m=0; m<ninds; m++) {
+      int m2 = 0;
+      while(inds[m2]!=m) m2++;
+      float fac = 2.0f;
+      if (accs[m2]==OP_READ) fac = 1.0f;
+      OP_plans[ip].transfer += fac*OP_plans[ip].ind_sizes[m+b*ninds]*args[m2].size;
+
+      // work out how many cache lines are used by indirect addressing
+
+      int i_map, l_new, l_old=-1;
+      int e0 = OP_plans[ip].ind_offs[m+b*ninds];
+      int e1 = e0 + OP_plans[ip].ind_sizes[m+b*ninds];
+
+      for (int e=e0; e<e1; e++) {
+        i_map = OP_plans[ip].ind_maps[m][e];
+        l_new = (i_map*args[m2].size)/OP_cache_line_size;
+        if (l_new>l_old) OP_plans[ip].transfer2 += fac*OP_cache_line_size;
+        l_old = l_new;
+        l_new = ((i_map+1)*args[m2].size-1)/OP_cache_line_size;
+        OP_plans[ip].transfer2 += fac*(l_new-l_old)*OP_cache_line_size;
+        l_old = l_new;
+      }
+
+      // also include mappings to load/store data
+
+      fac = 1.0f;
+      if (accs[m2]==OP_RW) fac = 2.0f;
+      OP_plans[ip].transfer  += fac*OP_plans[ip].ind_sizes[m+b*ninds]*sizeof(int);
+      OP_plans[ip].transfer2 += fac*OP_plans[ip].ind_sizes[m+b*ninds]*sizeof(int);
+    }
+  }
+
+  // print out useful information
+
+  if (OP_diags>1) {
+    printf(" number of blocks       = %d \n",nblocks);
+    printf(" number of block colors = %d \n",OP_plans[ip].ncolors);
+    printf(" maximum block size     = %d \n",bsize);
+    printf(" average thread colors  = %.2f \n",total_colors/nblocks);
+    printf(" shared memory required = %.2f KB \n",OP_plans[ip].nshared/1024.0f);
+    printf(" average data reuse     = %.2f \n",maxbytes*(set.size/total_shared));
+    printf(" data transfer (used)   = %.2f MB \n",
+                                       OP_plans[ip].transfer/(1024.0f*1024.0f));
+    printf(" data transfer (total)  = %.2f MB \n\n",
+                                       OP_plans[ip].transfer2/(1024.0f*1024.0f));
+  }
 
   // validate plan info
 
@@ -832,15 +1045,15 @@ extern op_plan * plan(char const * name, op_set set, int nargs, op_dat<void> *ar
 
   for (int m=0; m<ninds; m++) {
     mvHostToDevice(&(OP_plans[ip].ind_maps[m]), sizeof(int)*nindirect[m]);
-    mvHostToDevice(&(OP_plans[ip].ind_sizes[m]),sizeof(int)*nblocks);
-    mvHostToDevice(&(OP_plans[ip].ind_offs[m]), sizeof(int)*nblocks);
   }
 
   for (int m=0; m<nargs; m++) {
     if (inds[m]>=0)
-      mvHostToDevice(&(OP_plans[ip].maps[m]), sizeof(int)*set.size);
+      mvHostToDevice(&(OP_plans[ip].maps[m]), sizeof(short)*set.size);
   }
 
+  mvHostToDevice(&(OP_plans[ip].ind_sizes),sizeof(int)*nblocks*ninds);
+  mvHostToDevice(&(OP_plans[ip].ind_offs), sizeof(int)*nblocks*ninds);
   mvHostToDevice(&(OP_plans[ip].nthrcol),sizeof(int)*nblocks);
   mvHostToDevice(&(OP_plans[ip].thrcol ),sizeof(int)*set.size);
   mvHostToDevice(&(OP_plans[ip].offset ),sizeof(int)*nblocks);
@@ -880,7 +1093,7 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
   if (nelem != set.size) {
     printf(" *** OP_plan_check: nelems error \n");
   }
-  else {
+  else if (OP_diags>6) {
     printf(" *** OP_plan_check: nelems   OK \n");
   }
 
@@ -899,7 +1112,7 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
   if (err != 0) {
     printf(" *** OP_plan_check: offset error \n");
   }
-  else {
+  else if (OP_diags>6) {
     printf(" *** OP_plan_check: offset   OK \n");
   }
 
@@ -909,7 +1122,7 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
 
   int *blkmap = (int *) malloc(nblock*sizeof(int));
   for (int n=0; n<nblock; n++) blkmap[n] = OP_plan.blkmap[n];
-  qsort(blkmap,nblock,sizeof(int),compare);
+  qsort(blkmap,nblock,sizeof(int),comp);
 
   err = 0;
   for (int n=0; n<nblock; n++) err += (blkmap[n] != n);
@@ -919,7 +1132,7 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
   if (err != 0) {
     printf(" *** OP_plan_check: blkmap error \n");
   }
-  else {
+  else if (OP_diags>6) {
     printf(" *** OP_plan_check: blkmap   OK \n");
   }
 
@@ -933,15 +1146,15 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
     ntot = 0;
 
     for (int n=0; n<nblock; n++) {
-      err  += (OP_plan.ind_offs[i][n] != ntot);
-      ntot +=  OP_plan.ind_sizes[i][n];
+      err  += (OP_plan.ind_offs[i+n*ninds] != ntot);
+      ntot +=  OP_plan.ind_sizes[i+n*ninds];
     }
   }
 
   if (err != 0) {
     printf(" *** OP_plan_check: ind_offs error \n");
   }
-  else {
+  else if (OP_diags>6) {
     printf(" *** OP_plan_check: ind_offs OK \n");
   }
 
@@ -961,19 +1174,19 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
 
     for (int n=0; n<nblock; n++) {
       int last = -1;
-      for (int e=ntot; e<ntot+OP_plan.ind_sizes[m][n]; e++) {
+      for (int e=ntot; e<ntot+OP_plan.ind_sizes[m+n*ninds]; e++) {
         err  += (OP_plan.ind_maps[m][e] <= last);
         last  = OP_plan.ind_maps[m][e]; 
       }
       err  += (last >= set_size);
-      ntot +=  OP_plan.ind_sizes[m][n];
+      ntot +=  OP_plan.ind_sizes[m+n*ninds];
     }
   }
 
   if (err != 0) {
     printf(" *** OP_plan_check: ind_maps error \n");
   }
-  else {
+  else if (OP_diags>6) {
     printf(" *** OP_plan_check: ind_maps OK \n");
   }
 
@@ -992,11 +1205,11 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
       for (int n=0; n<nblock; n++) {
         for (int e=ntot; e<ntot+OP_plan.nelems[n]; e++) {
           int p_local  = OP_plan.maps[m][e];
-          int p_global = OP_plan.ind_maps[m2][p_local+OP_plan.ind_offs[m2][n]];
-          err += (p_global != map.map[OP_plan.idxs[m] + e * map.dim]);
+          int p_global = OP_plan.ind_maps[m2][p_local+OP_plan.ind_offs[m2+n*ninds]]; 
+
+          err += (p_global != map.map[OP_plan.idxs[m]+e*map.dim]);
         }
         ntot +=  OP_plan.nelems[n];
-				//printf("\nPLAN: %d %d", n, OP_plan.nelems[n]);
       }
     }
   }
@@ -1004,7 +1217,7 @@ void OP_plan_check(op_plan OP_plan, int ninds, int *inds, int ncolors) {
   if (err != 0) {
     printf(" *** OP_plan_check: maps error \n");
   }
-  else {
+  else if (OP_diags>6) {
     printf(" *** OP_plan_check: maps     OK \n");
   }
 

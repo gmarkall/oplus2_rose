@@ -1,3 +1,5 @@
+*.o
+doc-sphinx/_build
 tests/*/*_kernel.cu
 tests/*/op_par.cu
 tests/*/rose_*.cpp
@@ -6,5 +8,4 @@ tests/airfoil/airfoil
 tests/jac/jac
 tests/*/blank.cpp
 translator/op2rose
-*.o
 tests/*/test.log
